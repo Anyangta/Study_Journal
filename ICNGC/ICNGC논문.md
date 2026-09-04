@@ -1,5 +1,63 @@
 # ICNGC / ICNGC논문
 
+## 2026-09-05 — 서버환경확인-netem대상지정 (v1.0.1)
+
+### 한 일
+
+- **서버 환경 확인 완료. 우려했던 문제 없음.**
+  - cluster03 / cluster04 = **별개의 물리 머신 2대** (machine-id 상이,
+    `systemd-detect-virt: none` 베어메탈). 같은 공인 IP에 포트만 다른 거라
+    한 머신 위 컨테이너일까 의심했는데 아니었음
+  - CPU: Intel i9-9900K, `nproc`=16 (물리 8코어 / 하이퍼스레딩 16스레드)
+  - **직결 LAN**: `enp1s0f0`에서 172.29.54.8 ↔ 172.29.54.9 (같은 /24).
+    브리지를 안 거치는 실제 물리 NIC라 netem이 정상 동작함
+- 역할 배정 확정
+  | | 호스트 | 사설 IP | SSH 포트 | 역할 |
+  |---|---|---|---|---|
+  | 사이트 B | cluster03 | 172.29.54.8 | 5409 | 데이터 클라우드 (MinIO + 실행 에이전트) |
+  | 사이트 A | cluster04 | 172.29.54.9 | 5408 | 분석 클라우드 (`runner.py`) |
+- **두 대 모두 살아있는 Kubernetes 노드임을 발견** (`flannel.1`, `cni0`, docker
+  컨테이너 다수). 그래서 `setup/netem.sh`를 전면 재작성:
+  인터페이스 root qdisc 전체에 걸던 방식 → **실험 포트(9000, 8800)로 나가는
+  트래픽만 대상 지정**. `prio` qdisc의 priomap을 전부 0으로 둬서 매칭 안 된
+  트래픽은 unshaped band(1:1)로 흘리고, u32 필터로 peer IP + sport 매칭된
+  것만 band 1:3의 netem으로 보냄
+- `config.py`의 `B_HOST`를 사설 IP 172.29.54.8로 변경
+- `setup/measure_net.sh`를 PEER 사설 IP 기반으로 갱신 + load average 출력 추가
+
+### 다음 할 일
+
+- 코드 복사 (Git Bash에서, 계정 `wontak`)
+  ```
+  cd "/c/Users/Administrator/OneDrive/바탕 화면"
+  scp -P 5409 -r icngc_pushdown wontak@220.149.241.201:~/
+  scp -P 5408 -r icngc_pushdown wontak@220.149.241.201:~/
+  ```
+- 사이트 B(5409)에서: `sudo -n true` 확인 / `ss -tlnp | grep -E ':(9000|8800|9001)'` /
+  `uptime` / `iperf3 -s` 띄우기
+- 사이트 A(5408)에서: `PEER=172.29.54.8 ./setup/measure_net.sh`
+- **미확인 3가지 (이 값들이 나와야 다음 단계 확정 가능)**
+  1. `ethtool` Speed — 1000Mb/s인지 10000Mb/s인지에 따라 실험 대역폭 2조건이 정해짐
+  2. load average — k8s 노드 공유 중이라 부하 높으면 측정 노이즈. 시간대 조정 또는 반복 증가
+  3. 9000/8800 포트 충돌 여부 — 쓰이는 중이면 `config.py`와 `netem.sh`의 `PORTS` 동시 변경
+- **`sudo`가 안 되면 netem을 못 걸어서 대역폭 조건 실험 자체가 불가.
+  그 경우 설계 변경 필요** (링크 1조건 고정 + 코어 축만으로 축소)
+- 이후 Day 1 잔여(MinIO 기동 → `gen_data.py` → `agent_b.py`) → 09/06 첫 실험 배치
+
+### 참고할 맥락 / 결정 사항
+
+- 접속: `ssh -p 5409 wontak@220.149.241.201` (cluster03=B),
+  `ssh -p 5408 wontak@220.149.241.201` (cluster04=A)
+- **실험 트래픽은 반드시 사설 IP(172.29.54.x)를 쓸 것.** 공인 IP
+  220.149.241.201 경로는 NAT를 왕복하므로 netem 통제 밖으로 벗어남
+- **인터페이스 전체 shaping 금지.** 두 대가 공용 k8s 노드라서 root qdisc에
+  netem을 걸면 flannel VXLAN, 다른 사람 워크로드, 본인 SSH까지 같이 느려짐.
+  반드시 포트 대상 지정 방식(`netem.sh apply`)을 쓸 것
+- `nproc`=16은 하이퍼스레딩 포함 값. 물리 코어는 8개. 실험의 "B 가용 코어"
+  축(1/2/4/8)은 DuckDB `SET threads`로 조절하므로 그대로 유효
+- 실제 코드는 이 저널에 커밋하지 않음 (저장소 규칙).
+  위치: `바탕 화면/icngc_pushdown/`
+
 ## 2026-09-05 — 논문주제확정-교차클라우드복제시점 (v1.0.0)
 
 ### 한 일
