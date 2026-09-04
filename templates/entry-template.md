@@ -1,7 +1,11 @@
-# YYYY-MM-DD — 주제
+# <분야> — <제목> (v<버전>)
 
-- **프로젝트/저장소**: (예: github.com/Anyangta/xxx)
-- **브랜치**:
+- **날짜**: YYYY-MM-DD
+- **분야**: 
+- **제목**: 
+- **버전**: 
+- **관련 프로젝트/저장소**: (있다면. 예: github.com/Anyangta/xxx)
+- **브랜치**: 
 - **작업 환경**: (예: PC A, Claude Code on the web 등)
 
 ## 한 일
