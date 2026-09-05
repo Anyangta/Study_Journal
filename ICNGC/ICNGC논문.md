@@ -1,5 +1,85 @@
 # ICNGC / ICNGC논문
 
+## 2026-09-05 — 실험완료-6개조건344trial (v1.1.0)
+
+### 한 일
+
+- **실험 전량 완료. 6개 링크 조건, 총 344 trial.** 원본 데이터
+  `results_final.csv`, 조건별 정확도 `kstar_accuracy.csv`
+  | 조건 | 실측 goodput |
+  |---|---|
+  | 10GbE 무셰이핑 | 888 MB/s |
+  | 1Gbit + 10ms | 216 MB/s |
+  | 1Gbit + 50ms | 91.3 MB/s |
+  | 1Gbit + 150ms | 33.0 MB/s |
+  | 500Mbit + 50ms | 58.5 MB/s |
+  | 100Mbit + 50ms | 11.9 MB/s |
+- 그림 4장 생성: `fig1_crossover`, `fig2_objective_gap`, `fig3_kstar_cores`,
+  `fig4_rtt` (각각 pdf+png)
+- 논문 초고 완성 (`paper_draft.md`) — placeholder 0개, 모든 수치 실측
+- netem 정상 원복 확인 (인터페이스가 원래 `mq`+`fq_codel` 상태로 복귀)
+
+### 핵심 결과 (논문의 뼈대)
+
+1. **요금 기준 k\*는 링크 불변량.** 6개 조건 전부에서 σ=0.001일 때 796,
+   σ=0.01일 때 94로 **완전히 동일**. 옮기는 바이트 수는 대역폭·RTT와 무관하므로
+   당연하지만, 이것이 아래 불일치를 구조적으로 만듦
+2. **지연 기준 k\*는 never ~ 145로 변동.** RTT가 "복제할지 말지"를 결정하고,
+   대역폭이 "몇 번 만에 회수되는지"를 결정 (두 요인이 깔끔히 분리됨)
+3. **불일치의 방향이 뒤집힘 (가장 강한 발견).** RTT 0.1ms에서는 지연이
+   "복제하지 마라" / 요금이 "94회면 복제하라" → 지연이 더 보수적.
+   RTT 150ms에서는 지연이 "19회" / 요금이 "94회" → **요금이 더 보수적**.
+   크기 차이가 아니라 어느 쪽이 먼저 복제를 권하는지가 링크에 따라 역전됨
+4. **RTT 계열 (1Gbit 고정, σ=0.01)**: 0.1ms→never, 10ms→59, 50ms→24, 150ms→19.
+   RTT→0에서 k\*가 발산. 대역폭 교란 없이 검증됨
+5. **음성 결과: B의 코어 수는 무의미.** 1/2/4/8 스레드에서 k\*가 사실상 평평
+   (σ=0.05에서 29/27/31/32). DuckDB 1스레드도 링크보다 빠르므로 원격 CPU가
+   병목이 되지 않음. **원래 주제 D를 잡을 때 핵심 축으로 삼았던 가설이 반증됨**
+6. **모델 정확도**: 나이브 13.6% → 정밀 10.5% (측정 기반 보정항 2개 추가:
+   요청당 왕복 12.2ms, B의 Parquet 직렬화 259 MB/s)
+
+### 다음 할 일
+
+- **논문 마무리 (09/06~)**
+  - §2 인용 6~8건 채우기 (S3 Select, PushdownDB, Skyplane, Globus/GridFTP,
+    SPANStore, Parquet zone map)
+  - ICNGC 템플릿으로 변환하고 4장으로 압축 (현재 분량 초과)
+  - 그림 캡션 작성. Fig 3(음성 결과)을 그림으로 둘지 문장 한 줄로 줄일지 판단
+  - 선택: TPC-H `lineitem`으로 두 번째 데이터셋 (이미 생성 가능 상태,
+    `python3 gen_data.py --tpch`). 주장 성립에 필수는 아님
+- **정리 작업 (사용자 직접, root 필요)**
+  `ssh -p 5408 wontak@220.149.241.201` → `su -` → `rm /etc/sudoers.d/icngc-tc`
+
+### 참고할 맥락 / 결정 사항 (다음 세션 이어받기용)
+
+- **서버 접속**: `ssh icngc-b` = cluster03 = 172.29.54.8 = 사이트 B (데이터),
+  `ssh icngc-a` = cluster04 = 172.29.54.9 = 사이트 A (분석).
+  `~/.ssh/config`에 별칭 등록됨, 키는 `~/.ssh/id_ed25519_icngc` (암호 없음)
+  - 주의: 외부 포트는 **5408=cluster03, 5409=cluster04**로 번호와 순서가 반대
+  - 내부 sshd는 **2222 포트** (A→B 제어용, A의 키가 B에 등록돼 있음)
+- **서버에 켜둔 것** (재기동 불필요): B에 MinIO(:9000, admin/password123)와
+  실행 에이전트(:8800). 데이터 `~/icngc_pushdown/data/synth.parquet` 1.87GiB,
+  MinIO 버킷 `warehouse`에도 업로드됨
+- **코드 위치**: 로컬 `바탕 화면/icngc_pushdown/`, 양 서버 `~/icngc_pushdown/`
+  (저장소 규칙상 저널에는 커밋 안 함)
+- **실험 재실행**: A에서 `DEADLINE=$(date -d "HH:MM" +%s) setsid nohup
+  ./drive_all.sh > drive.log 2>&1 &`. 조건 목록은 `drive_all.sh` 하단
+- **오늘 겪은 함정 3가지 (반복하지 말 것)**
+  1. **실행 중인 셸 스크립트를 수정하면 안 됨.** bash가 바이트 오프셋으로 읽어가서
+     실행이 깨짐. 1gbit_50ms 조건을 한 번 날렸음
+  2. **Windows에서 scp한 셸 스크립트는 CRLF 줄바꿈이라 즉시 실패함**
+     (`/usr/bin/env: 'bash^M': No such file or directory`). 올린 뒤 반드시
+     `dos2unix *.sh` 또는 `sed`로 CR 제거 후 `bash -n`으로 문법 확인할 것
+  3. `pkill -f agent_b.py`를 ssh로 실행하면 **자기 명령줄까지 매칭해 세션을 죽임**.
+     `pkill -f "[a]gent_b.py"`처럼 써야 함
+- **netem은 반드시 포트 대상 지정으로만.** 두 서버는 9명이 쓰는 공용 k8s 노드라
+  인터페이스 전체 shaping 금지. `drive_all.sh`의 `shape()`가 u32 필터로
+  9000/8800 포트만 잡음. 안전장치로 `setup/watchdog.sh`도 있음
+- **DuckDB `.arrow()`는 버전에 따라 RecordBatchReader를 반환**. `as_table()`
+  헬퍼로 정규화해뒀음 (`agent_b.py`, `runner.py`)
+- **실험 설계 요령**: k를 스윕하지 않음. 한 trial에서 K회 반복해 "일회성 비용"과
+  "질의당 비용"을 분리 측정하면 모든 k 곡선이 해석적으로 나옴
+
 ## 2026-09-05 — 서버환경확인-netem대상지정 (v1.0.1)
 
 ### 한 일
