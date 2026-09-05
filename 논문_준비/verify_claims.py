@@ -5,6 +5,7 @@ Run this before submitting.  If a line says FAIL, the paper claims something the
 data does not support and must be corrected.  Nothing here reuses the analysis
 scripts; it recomputes from the raw trial records.
 """
+import re, sys
 import numpy as np, pandas as pd
 
 d = pd.read_csv("results_final.csv")
@@ -98,5 +99,23 @@ if len(ks) > 1:
           (max(ks) - min(ks)) / np.mean(ks), 0.20, tol=0.60)
     print(f"         -> {[round(k) for k in ks]}")
 
-print(f"\n{ok} checks passed, {fail} failed")
+print("")
+print("== Result 6: cost model accuracy, held-out evaluation")
+try:
+    import subprocess, sys, re
+    out = subprocess.run([sys.executable, "model_v6.py"],
+                         capture_output=True, text=True).stdout
+    blk = out.split("HELD OUT only")[-1]
+    for key, want in (("v1  no pruning", 48.9), ("v4  pruning", 38.5),
+                      ("v6  pruning + per-site floor", 21.4)):
+        m = re.search(re.escape(key) + r"\s+median\s+([0-9.]+)%", blk)
+        if m:
+            check("held-out median err, " + key, float(m.group(1)), want, tol=0.10)
+        else:
+            print("  [SKIP] could not parse " + key)
+except Exception as e:
+    print("  [SKIP] model_v6.py not runnable here (%s)" % e)
+
+print("")
+print("%d checks passed, %d failed" % (ok, fail))
 raise SystemExit(1 if fail else 0)

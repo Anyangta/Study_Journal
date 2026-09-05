@@ -27,7 +27,7 @@ departs from the balance point. We check the emulated conditions against RTT and
 storage endpoints, where the same object served from a CDN edge moves 3-4x
 faster than from its origin region at identical egress cost — the effect in
 production. We give a planner that predicts `k*` from the Parquet footer alone,
-with no scan of the data, to a median 9.3% relative error, and use it to drive
+with no scan of the data, and use it to drive
 an online break-even policy that costs 48x less than the always-pushdown
 default while holding 65% fewer replicas than always-replicate.
 
@@ -133,11 +133,12 @@ fetched with a few ranged GETs and no scan:
   `σ ∈ [0.001, 1]`.
 - `π̂` exactly, from per-column-chunk compressed sizes.
 
-**Cost model.** Counting scan time and transfer time is enough: it predicts
-`k*` to a median 9.3% relative error (§5, Result 6). We also built refinements
-adding measured per-request overhead, serialisation rate and replica-side zone
-map pruning; they did not improve accuracy, and we report that rather than
-carrying the extra terms.
+**Cost model.** Each plan's per-query cost is a floor plus a scan term that
+zone maps prune in proportion to `σ`, plus a transfer term. Calibrated on one
+condition and evaluated on five held-out ones, it predicts `k*` to a median
+21.4% relative error (§5, Result 6). Calibrating instead from a separate scan
+microbenchmark is much worse, for a reason worth stating: the microbenchmark
+never materialises rows.
 
 ## 5. Evaluation
 
@@ -233,29 +234,33 @@ scans the projected columns faster than the link can carry even a small result,
 so remote CPU never becomes the binding constraint in this regime. We report
 this because it cuts against the intuition that motivated the experiment.
 
-**Result 6 — modelling zone-map pruning halves the model's error.** Our first
-cost model counted an unpruned scan at both sites. It predicts `k*` to a median
-relative error of 23.4% over 100 matched configurations, and produces a finite
-prediction for only 89 of them. The measurements say both sites prune: the
-local replica scan runs in 4.8 ms at `σ = 0.001` and 749 ms at `σ = 1`, and a
-pushed-down query returns in 27.4 ms where the unpruned model expects ~200 ms.
-Both use the same footer zone maps our planner reads.
+**Result 6 — pruning and a per-site floor, and why a microbenchmark
+calibration does not transfer.** Predicting `k*` needs a cost model, and ours
+went through three versions. We evaluate them out of sample: the cost structure
+is read off one condition's own timings (`10gbit_full`, four cores, by
+regressing measured per-query seconds on `σ`) and applied unchanged to the
+other five conditions, which the calibration never sees.
 
-Multiplying the two predicate-bearing scans by `σ` — but not the projection
-step, which has no predicate and must read every row group — halves the median
-error to 12.5% and yields a finite prediction in all 100 configurations. The
-mean error rises, because the pruned model now overshoots badly at the lowest
-selectivity (1311 predicted against 139 measured at `σ = 0.001`): pruning cannot
-drive a scan to zero, and each site retains a floor of roughly 5 ms locally and
-27 ms remotely. Adding a single shared floor term does not help, since it
-appears in both numerator and denominator of `k*` and largely cancels (13.8%).
-Separate per-site floors would likely close the gap; we stopped there rather
-than fit more parameters to 100 points.
+| model | median rel. error, all 100 | held out, 72 |
+|---|---|---|
+| v1: no pruning | 65.1% | 48.9% |
+| v4: both predicate-bearing scans pruned by `σ` | 33.0% | 38.5% |
+| v6: v4 plus a floor per site | **15.1%** | **21.4%** |
 
-For the decision the planner actually makes — is `k` above or below the
-threshold — a median error of 12.5% is comfortable everywhere except the very
-selective tail, and that tail is exactly where §5's Result 7 says the objective
-choice matters most. That is the honest limit of the current model.
+Two things drive the improvement. First, both sites prune: the local replica
+scan runs in 4.8 ms at `σ = 0.001` and 749 ms at `σ = 1`, and site B skips row
+groups using the same footer zone maps our planner reads. Second, pruning
+cannot take a scan to zero — v4 overshoots badly at the lowest selectivity
+because it lets the scan term vanish. Measured floors are 15.6 ms at the
+analyst site and 52.3 ms at the data site, the latter carrying the round trip.
+
+The calibration itself is the cautionary result. Our first attempt derived
+site B's scan rate from a separate full-scan microbenchmark, which reported
+1374 MB/s per thread and implied a 0.2 s scan; the real per-query cost is
+2.6 s, thirteen times larger. The microbenchmark query was an aggregate, which
+DuckDB answers without materialising rows, while the actual pushdown plan
+materialises and serialises them. A cost model calibrated on a scan
+microbenchmark will mispredict any plan that returns rows.
 
 **Result 7 — the disagreement is concentrated at low selectivity.** Repeating
 the unshaped condition with every plan measured at all seven selectivities

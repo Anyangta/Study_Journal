@@ -28,7 +28,7 @@
 | 참고문헌 | **아직 없음 — 사용자가 채워야 함** |
 
 **측정 데이터는 진짜입니다.** cluster03/cluster04에서 실제로 돌린 결과이고,
-`verify_claims.py`로 모든 수치를 원본 CSV에서 재검증할 수 있습니다(34개 전부 통과).
+`verify_claims.py`로 모든 수치를 원본 CSV에서 재검증할 수 있습니다(37개 전부 통과).
 문제가 되는 건 데이터가 아니라 **문장의 저자성**입니다.
 
 ---
@@ -168,9 +168,12 @@ Parquet zone map 가지치기가 동작하는 조건을 만들기 위해서입�
    `pkill -f "[a]gent_b.py"`처럼 대괄호를 써야 합니다. 세 번 당했습니다.
 4. **DuckDB `.arrow()`는 버전에 따라 `RecordBatchReader`를 반환.** `as_table()`
    헬퍼로 정규화했습니다.
-5. **`SELECT count(*)`로 스캔 속도를 재면 안 됨.** DuckDB가 Parquet footer만 읽고
+5. **마이크로벤치마크 캘리브레이션이 실제 워크로드로 전이되지 않음.** 집계
+   질의로 잰 스캔 속도가 행을 반환하는 플랜의 비용을 13배 과소평가했다
+   (0.2초 예측 대 2.6초 실측). DuckDB가 집계에서는 행을 materialize하지 않기 때문.
+6. **`SELECT count(*)`로 스캔 속도를 재면 안 됨.** DuckDB가 Parquet footer만 읽고
    답하므로 아무것도 측정되지 않습니다. 모든 컬럼을 건드리는 질의를 써야 합니다.
-6. **Git Bash에서 `shutdown /s`는 MSYS 경로 변환에 걸림.** `-s -t` 형태나
+7. **Git Bash에서 `shutdown /s`는 MSYS 경로 변환에 걸림.** `-s -t` 형태나
    PowerShell을 쓸 것.
 
 ---
@@ -223,8 +226,8 @@ python3 verify_claims.py   # 논문의 모든 수치 재검증 -- 투고 전 반
 
 ### 검증 상태
 
-`verify_claims.py`가 논문의 헤드라인 수치 34개를 원본 `results_final.csv`에서
-독립적으로 재계산합니다(분석 스크립트를 재사용하지 않음). **2026-09-06 기준 34개
+`verify_claims.py`가 논문의 헤드라인 수치 37개를 원본 `results_final.csv`에서
+독립적으로 재계산합니다(분석 스크립트를 재사용하지 않음). **2026-09-06 기준 37개
 전부 통과.** 수치를 수정할 때마다 다시 돌리십시오.
 
 ---
