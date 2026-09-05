@@ -1,0 +1,36 @@
+
+=== 10gbit_full  (2000 objects, Zipf reuse) ===
+policy             latency (s)   egress $ storage $/mo   total $  replicas
+ALWAYS_PUSH             331336    4104.91         0.00   4104.91         0
+ALWAYS_REPLICATE         87600      84.08        21.49    105.57      2000
+BREAKEVEN                86771      78.17         7.53     85.70       701
+ORACLE                   84539      45.07         7.53     52.60       701
+  BREAKEVEN: 1.03x oracle latency, 1.63x oracle cost (ski-rental bound 2.00x)
+  replicas made: BREAKEVEN 701 vs ALWAYS_REPLICATE 2000 (oracle 701)
+
+=== 1gbit_50ms  (2000 objects, Zipf reuse) ===
+policy             latency (s)   egress $ storage $/mo   total $  replicas
+ALWAYS_PUSH            2250703    7650.23         0.00   7650.23         0
+ALWAYS_REPLICATE        162970      84.08        21.49    105.57      2000
+BREAKEVEN               164071      78.07         8.92     86.98       830
+ORACLE                  154319      49.52         8.92     58.44       830
+  BREAKEVEN: 1.06x oracle latency, 1.49x oracle cost (ski-rental bound 2.00x)
+  replicas made: BREAKEVEN 830 vs ALWAYS_REPLICATE 2000 (oracle 830)
+
+=== 1gbit_150ms  (2000 objects, Zipf reuse) ===
+policy             latency (s)   egress $ storage $/mo   total $  replicas
+ALWAYS_PUSH            4665704    6302.70         0.00   6302.70         0
+ALWAYS_REPLICATE        173641      84.08        21.49    105.57      2000
+BREAKEVEN               176206      74.89         8.99     83.89       837
+ORACLE                  152099      47.95         8.99     56.94       837
+  BREAKEVEN: 1.16x oracle latency, 1.47x oracle cost (ski-rental bound 2.00x)
+  replicas made: BREAKEVEN 837 vs ALWAYS_REPLICATE 2000 (oracle 837)
+
+=== 100mbit_50ms  (2000 objects, Zipf reuse) ===
+policy             latency (s)   egress $ storage $/mo   total $  replicas
+ALWAYS_PUSH            8586685    7953.65         0.00   7953.65         0
+ALWAYS_REPLICATE        253924      84.08        21.49    105.57      2000
+BREAKEVEN               247070      72.49         7.83     80.33       729
+ORACLE                  214354      44.97         7.83     52.80       729
+  BREAKEVEN: 1.15x oracle latency, 1.52x oracle cost (ski-rental bound 2.00x)
+  replicas made: BREAKEVEN 729 vs ALWAYS_REPLICATE 2000 (oracle 729)
