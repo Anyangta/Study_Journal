@@ -21,10 +21,10 @@ failure is therefore an area of accumulated backlog, not a quantity of lost work
 and the two objectives are minimised at different intervals with different
 scaling exponents: the wasted-work optimum grows as `M^{1/2}`, the latency
 optimum as `M^{1/3}`. We derive both, and measure them on a Flink 1.20 cluster
-with a Kafka source under injected TaskManager failures. [RESULT-SUMMARY]
+with a Kafka source under injected TaskManager failures. On a Flink 1.20 / Kafka 3.9 deployment the measured optimum sits at 4.4 s where the classical rule says 4.9 s at a 55 s MTBF and 39.9 s at a one-hour MTBF, against a latency optimum of 18.4 s; the failure cost of an episode is predicted from measured quantities alone with R² = 0.998.
 We also find that the headroom available during recovery is not the nominal
 headroom: immediately after a restore the state backend is cold, and the measured
-catch-up rate is [DRAIN-GAP] below the steady-state service rate, which makes a
+catch-up rate is 10 %, and 28 % when checkpointing is continuous, below the steady-state service rate, which makes a
 failure substantially more expensive than the nominal figures predict.
 
 ---
@@ -163,7 +163,7 @@ shared with unrelated lab services; a MySQL instance holds roughly one core for
 the duration and the Kubernetes control plane is resident. We pin our components
 to disjoint core sets — Kafka on cores 0–3, the JobManager on core 4,
 TaskManagers on 5–12, the load generator on 13–15 — and record the one-minute
-load average alongside every measurement. [SECOND-NODE-NOTE]
+load average alongside every measurement. The second node of the intended two-node testbed is unreachable: it answers ICMP and completes TCP handshakes, but no user-space service on it responds, and we have no out-of-band power control. §6 states what that costs us.
 
 **Software.** Apache Flink 1.20.5 in standalone mode: one JobManager and three
 TaskManagers of two slots each, job parallelism 4, so a failure always leaves
@@ -197,7 +197,7 @@ backlog areas the model is written in.
 with no consumer attached, then start the job from the earliest offset and read
 off the drain rate. That is the `μ` the model's catch-up term refers to, measured
 rather than inferred. Holding the spin loop fixed at 32 000 iterations, `μ` stays
-within [MU-RANGE] across an 8× change in state size, so state size moves `δ` and
+within 96 858–112 480 records/s (14 %) across an 8× change in state size, so state size moves `δ` and
 `D` while leaving `μ` and `ρ` alone.
 
 **Failure injection.** At Poisson-distributed times (minimum gap 40 s, so no two
@@ -210,15 +210,173 @@ its steady value.
 
 ## 5. Results
 
-[RESULTS-SECTION]
+All numbers below are for the reference workload: 200 000 keys of 1 KiB state,
+`lambda` = 54 811 records/s against a calibrated service rate of 108 925
+records/s (`rho` = 0.50), checkpoints of 534–701 MB taking 2.1–2.8 s. The
+checkpoint interval is swept over {2, 4, 8, 16, 32, 64, 128} s with failures
+injected at a mean of one per 55 s. Every run lasts 480 s of measurement after a
+75 s warm-up; the seven runs in this sweep contain 40 failure episodes.
+
+### 5.1 The interval has a floor, and it is the checkpoint's own duration
+
+| `tau` (s) | achieved gap (s) | steady latency (ms) | checkpoint (MB) | checkpoint (ms) |
+|---|---|---|---|---|
+| 2   | 1.9  | 622    | 534 | 2122 |
+| 4   | 3.8  | 696    | 701 | 2764 |
+| 8   | 7.6  | 265    | 633 | 2460 |
+| 16  | 15.6 | 137    | 573 | 2316 |
+| 32  | 31.5 | 106    | 580 | 2183 |
+| 64  | 63.4 | 98     | 669 | 2687 |
+| 128 | —    | (unstable) | 519 | 2842 |
+
+Between 8 s and 64 s the steady-state latency falls as `1/tau` exactly as the
+model says, converging on a floor of `l0` = 57 ms (fit R² = 0.950). Below about
+8 s it turns around: a checkpoint takes 2.1–2.8 s, so at `tau` = 2 s the job is
+checkpointing essentially all the time, one checkpoint's disturbance never drains
+before the next begins, and the latency more than doubles. **The useful interval
+range is bounded below by roughly twice the checkpoint duration**, which is not a
+free parameter — it is set by the state size and the store's write bandwidth.
+Extrapolating the `1/tau` term below that bound, as the classical rule implicitly
+does, predicts a benefit that the system cannot deliver.
+
+### 5.2 A checkpoint delays five times more than it costs
+
+Two different measurements of "what a checkpoint costs" disagree by 5.8×.
+
+- **Capacity actually lost.** Over each checkpoint's own window the job served
+  `delta_cap` = 0.221 s worth of arrivals less than it should have — 2–3 % of
+  capacity, stable across `tau` from 8 s to 64 s.
+- **Equivalent stall implied by latency.** Fitting `l0 + delta²/(2(1-rho)tau)` to
+  the same runs gives `delta` = 1.277 s.
+
+A checkpoint therefore *delays* about 5.8 times more record-seconds than the
+throughput it removes: barrier alignment and buffered records age without being
+dropped from the count. This matters directly for interval selection, because the
+classical rule is written in the capacity currency. Feeding the capacity figure
+into a latency objective understates the checkpoint term by a factor of 34
+(`delta` enters squared).
+
+### 5.3 The outage is three times what the engine reports
+
+Flink reports 1.25 s median from the `kill -9` to the restore of the checkpoint.
+The oldest record that comes out after the restart, however, is 4.11 s old once
+its own checkpoint age is subtracted (median over 36 episodes, s.d. 0.5 s). The
+missing 2.9 s is the ramp back to service — task scheduling, reopening ~600 MB of
+RocksDB state, and re-establishing the Kafka fetches. The interval has to cover
+the outage a record sees, not the one the engine logs, and using the reported
+figure underestimates the failure term by a factor of about 10 at small `tau`.
+
+The catch-up rate is likewise not the nominal one: the median service rate while
+still behind is 98 000 records/s, 90 % of the calibrated `mu`, and it falls to
+78 000 records/s (72 %) at `tau` = 2 s where checkpointing is continuous.
+
+### 5.4 Failure cost is predicted with no free parameter
+
+For each episode we predict the excess latency it causes from three quantities
+measured on that same episode — the peak latency, the drain rate, and the
+arrival rate — and nothing else:
+
+```
+A = mu_d * lambda * peak² / (2 (mu_d - lambda))
+```
+
+Across 36 episodes spanning two orders of magnitude in cost (1.4 to 143 million
+record·s) the prediction tracks the measurement with **R² = 0.998** and a median
+ratio of **1.14** (median relative error 24.7 %). Regressing the measured excess
+on `(a + D)²`, where `a` is the actual age of the last completed checkpoint at
+the moment of the kill, gives R² = 0.999 and a slope 0.937× the parameter-free
+prediction. The quadratic form is not an assumption that survived — it is the
+form the data has.
+
+### 5.5 The optimum, and how far the classical rule is from it
+
+With `delta` = 1.277 s, `D` = 4.11 s, `rho` = 0.50:
+
+| `M` | latency-optimal (measured terms) | latency-optimal (closed form) | wasted-work optimal | classical Young/Daly | ratio |
+|---|---|---|---|---|---|
+| 30 s  | 2.8 s  | 2.7 s  | 5.1 s   | 3.6 s   | 1.8× |
+| 55 s  | 3.6 s  | 3.5 s  | 7.0 s   | 4.9 s   | 1.9× |
+| 150 s | 5.5 s  | 5.3 s  | 11.5 s  | 8.1 s   | 2.1× |
+| 10 min| 9.4 s  | 9.2 s  | 22.9 s  | 16.3 s  | 2.4× |
+| 1 h   | 18.4 s | 18.0 s | 56.2 s  | 39.9 s  | 3.1× |
+| 1 day | 56.6 s | 55.3 s | 275.3 s | 195.3 s | 4.9× |
+
+The closed form of (1) agrees with the optimum obtained by composing the measured
+steady and episode terms to within 3 % at every `M`. Directly, the seven measured
+runs at `M` = 55 s put the minimum mean latency at an achieved interval of 4.4 s
+— one grid step from the predicted 3.5 s.
+
+The gap to the classical rule is small when failures are frequent and grows
+without bound as the cluster becomes reliable, because one answer grows as
+`M^{1/2}` and the other as `M^{1/3}`. At an MTBF of one hour — an unremarkable
+figure for a small cluster — the classical rule picks an interval 2.2–3.1× too
+long; at one day, 3.4–4.9× too long. Every one of those seconds is added
+directly to the tail latency of the next failure.
+
+### 5.6 Beyond a threshold the job never catches up
+
+At `tau` = 128 s under `M` = 55 s failures the job does not have a steady state at
+all: mean latency is 126 s and rising, because the backlog left by one failure
+outlives the gap to the next. The condition is not a capacity condition — the job
+runs at 50 % utilisation throughout. Requiring the expected catch-up to finish
+inside one MTBF,
+
+```
+lambda (tau/2 + D) / (mu_d - lambda) + D  <  M
+```
+
+puts the ceiling at 72 s for these parameters. Measured: `tau` = 64 s is stable
+(13.6 s mean latency), `tau` = 128 s is not. The classical rule has no term that
+can express this ceiling, and at `M` = 55 s it recommends 4.9 s — safe here only
+by accident of being far below it.
+
+[PENDING-ARMS] Utilisation, state-size, backend and checkpoint-mode arms are
+still running; §5.7 will report whether `delta`, `D` and the exponent hold across
+them.
 
 ## 6. Limitations
 
-[LIMITATIONS]
+**One machine.** The intended two-node testbed lost its second node before this
+work started — the machine answers ICMP and completes TCP handshakes but no
+user-space process on it responds, and we have no out-of-band power control. The
+cluster here is therefore one JobManager, three TaskManagers and a broker as
+separate processes on one host, pinned to disjoint core sets. Process failure,
+state restore, source rewind and catch-up are all real; what is missing is
+network distance between the failed task and its replacement, which would add to
+`D` and so move the optimum up. Our numbers are the optimistic end.
+
+**One failure mode.** We `kill -9` a TaskManager that is hosting tasks. Slow
+nodes, partial partitions and JobManager loss have different `D` distributions.
+
+**One workload shape.** A keyed state update with a configurable per-record spin.
+The spin is what lets us hold `mu` fixed while state size varies 8×, but a
+pipeline with joins or windows would have different alignment behaviour, which
+is exactly where the 5.8× gap between the two cost currencies comes from.
+
+**Shared host.** An unrelated MySQL instance holds about one core throughout and
+a Kubernetes control plane is resident. We pin around them and log load average
+with every sample, but they add variance we cannot remove.
+
+**`delta` is fitted from four points.** The saturated (`tau` <= 4 s) and unstable
+(`tau` = 128 s) runs are excluded from that regression on stated criteria, and
+reported separately rather than dropped.
 
 ## 7. Conclusion
 
-[CONCLUSION]
+The interval question for a stream processor is not the batch question with
+different constants. A durable source turns lost work into replayed work, replay
+competes with live arrivals for the same capacity, and the cost that a latency
+SLA feels is the area under the resulting backlog — quadratic in the checkpoint
+age where the batch cost is linear. The optimum accordingly grows as the cube
+root of the mean time between failures rather than the square root, and the two
+answers separate by 3× at an MTBF of an hour and 5× at a day.
+
+Two measurement results matter as much as the exponent. A checkpoint delays 5.8×
+more record-seconds than the capacity it consumes, so a rule calibrated in
+capacity is calibrated in the wrong currency. And the outage a record actually
+experiences is 4.1 s where the engine reports 1.25 s, because reopening the state
+and refilling the source are not part of what "restored" means. Both push the
+right interval down, and both are invisible to the classical derivation.
 
 ---
 
