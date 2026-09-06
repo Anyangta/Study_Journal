@@ -18,14 +18,15 @@ of accumulated backlog, quadratic in the age of the last checkpoint where the
 classical cost is linear, and the latency-optimal interval grows strictly more slowly than
 `M^{1/2}`, with an exponent that falls from 0.43 to 0.34 over the practical
 range of failure rates and approaches 1/3 asymptotically. We derive this and measure every term of it on Flink 1.20
-with a Kafka source under injected TaskManager failures. Across 36 episodes
+with a Kafka source under injected TaskManager failures. Across 24 episodes
 spanning two orders of magnitude in cost, the latency an episode adds is
 predicted from quantities measured on that same episode, with no fitted
-parameter, at R² = 0.998; the measured optimum is 4.4 s against a predicted
-3.5 s. At a one-hour MTBF the classical rule picks 39.9 s where the latency
-optimum is 18.0 s. Two measurements explain most of the gap: a checkpoint delays
-5.8× more record-seconds than the throughput it removes, and the outage a record
-experiences is 4.1 s where the engine reports 1.25 s.
+parameter, at R² = 0.999; the measured optimum is 4.4 s against a predicted
+3.6 s, and at half the state size 2.2 s against 2.6 s. At a one-hour MTBF the
+classical rule picks 39.9 s where the latency optimum is 18.4 s. Two
+measurements explain most of the gap: a checkpoint delays 5.8× more
+record-seconds than the throughput it removes, and the outage a record
+experiences is 4.3 s where the engine reports 1.2 s.
 
 ## 1. Introduction
 
@@ -174,7 +175,8 @@ excess-backlog area until latency returns to within twice its steady value.
 Reference workload: 200 000 keys of 1 KiB state, `λ` = 54 811 records/s against a
 calibrated 108 925 (`ρ` = 0.50), checkpoints of 534–701 MB taking 2.1–2.8 s,
 `τ` swept over {2, 4, 8, 16, 32, 64, 128} s, failures at one per 55 s, 480 s of
-measurement per run after 75 s of warm-up, 40 episodes in total.
+measurement per run after 75 s of warm-up, 40 injected failures of which 24 land
+in runs where an episode is well defined (§4.4).
 
 ### 4.1 The interval has a floor
 
@@ -199,17 +201,21 @@ being dropped from the count. Since `δ` enters the optimum squared, feeding the
 capacity figure into a latency objective understates the checkpoint term by a
 factor of 34.
 
-### 4.3 The outage is three times what the engine reports
+### 4.3 The outage is three and a half times what the engine reports
 
-Flink reports a median 1.25 s from the `kill -9` to the restore. The oldest
-record that emerges after the restart is 4.11 s old once its own checkpoint age
-is subtracted (36 episodes, s.d. 0.5 s). The missing 2.9 s is the ramp back to
+Flink reports a median 1.20 s from the `kill -9` to the restore. The oldest
+record that emerges after the restart is 4.28 s old once its own checkpoint age
+is subtracted (24 episodes, s.d. 0.5 s). The missing 3.1 s is the ramp back to
 service — scheduling, reopening ~600 MB of RocksDB state, re-establishing the
 Kafka fetches. The interval must cover the outage a record sees, not the one the
-engine logs; using the reported figure understates the failure term by about 10×
-at small `τ`. The catch-up rate is likewise not nominal: 98 000 records/s while
-still behind, 90 % of the calibrated `μ`, falling to 78 000 (72 %) at `τ` = 2 s
-where checkpointing is continuous.
+engine logs; using the reported figure understates the failure term by more than
+an order of magnitude at small `τ`, since it enters squared.
+
+The catch-up rate, by contrast, is close to nominal once the interval is in its
+usable range: 104 000 records/s while still behind, 95 % of the calibrated `μ`.
+It collapses to 78 000 (72 %) only at `τ` = 2 s, where checkpointing runs
+continuously — so the depression is a checkpointing cost, not a cold-state one,
+and we do not claim a cold-restore penalty.
 
 ### 4.4 Failure cost, predicted with no free parameter
 
@@ -220,31 +226,43 @@ that same episode — peak latency, drain rate, arrival rate —
 A = μ_d λ peak² / (2 (μ_d − λ))
 ```
 
-Across 36 episodes spanning 1.4 to 143 million record·s the prediction tracks the
-measurement at **R² = 0.998** with a median ratio of **1.14** (Fig. 2).
+Across 24 episodes spanning two orders of magnitude in cost the prediction tracks
+the measurement at **R² = 0.999** with a median ratio of **1.18** (Fig. 2).
 Regressing the measured excess on `(a + D)²`, with `a` the actual checkpoint age
-at the kill, gives R² = 0.999 and a slope 0.937× the parameter-free value. The
-quadratic form is not an assumption that survived; it is the form the data has.
-The same prediction holds at half the state size: at 100 MB the slope is 1.029×
-predicted with R² = 0.997, while `δ` falls from 1.277 s to 0.842 s and `D` from
-4.11 s to 3.68 s — the model transfers, the constants move as it says they should.
+at the kill, gives R² = 0.999 and a slope **1.001×** the parameter-free value.
+The quadratic form is not an assumption that survived; it is the form the data
+has.
+
+Episodes are counted only where a steady level exists to measure excess against:
+runs whose interval is below twice the checkpoint duration, and runs that never
+returned to a steady level, are reported separately (§4.1, §4.6) rather than
+pooled. Including them halves the apparent agreement — the slope moves to 0.94
+and the 400 MB arm's R² to 0.95 — which is itself a warning about validating a
+recovery model on runs that never recovered.
+
+The prediction transfers across state size. At 100 MB the slope is 1.036× with
+R² = 0.998, while `δ` falls from 1.277 s to 0.842 s and `D` from 4.28 s to
+3.68 s; the model holds and its constants move as it says they should.
 
 ### 4.5 The optimum, and how far the classical rule is from it
 
-With `δ` = 1.277 s, `D` = 4.11 s, `ρ` = 0.50:
+With `δ` = 1.277 s, `D` = 4.28 s, `ρ` = 0.50:
 
-| `M` | latency-optimal (measured terms) | closed form (1) | wasted-work | Young/Daly | ratio |
-|---|---|---|---|---|---|
-| 30 s | 2.8 s | 2.7 s | 5.1 s | 3.6 s | 1.8× |
-| 55 s | 3.6 s | 3.5 s | 7.0 s | 4.9 s | 1.9× |
-| 10 min | 9.4 s | 9.2 s | 22.9 s | 16.3 s | 2.4× |
-| 1 h | 18.4 s | 18.0 s | 56.2 s | 39.9 s | 3.1× |
-| 1 day | 56.6 s | 55.3 s | 275.3 s | 195.3 s | 4.9× |
+| `M` | latency-optimal, closed form (1) | wasted-work | Young/Daly | ratio |
+|---|---|---|---|---|
+| 30 s | 2.8 s | 5.1 s | 3.6 s | 1.9× |
+| 55 s | 3.6 s | 7.0 s | 4.9 s | 1.9× |
+| 10 min | 9.4 s | 22.9 s | 16.3 s | 2.4× |
+| 1 h | 18.4 s | 56.2 s | 39.9 s | 3.1× |
+| 1 day | 56.5 s | 275.3 s | 195.3 s | 4.9× |
 
 The closed form agrees with the optimum obtained by composing the measured terms
 to within 3 % at every `M`, and the seven runs at `M` = 55 s put the measured
-minimum at an achieved interval of 4.4 s — one grid step from the predicted 3.5 s
-(Fig. 1). The gap to the classical rule is modest when failures are frequent and
+minimum at an achieved interval of 4.4 s — one grid step from the predicted 3.6 s
+(Fig. 1). At 100 MB of state the same comparison gives a measured minimum of
+2.2 s against a predicted 2.6 s: the optimum moves with state size, in the
+direction and by roughly the amount the model says. The gap to the classical
+rule is modest when failures are frequent and
 grows without bound as the cluster becomes reliable, because the wasted-work
 answer grows as `M^{1/2}` exactly while the latency answer grows more slowly
 (Fig. 3). Its local exponent `d log τ*/d log M` is 0.428 at `M` = 55 s, 0.390 at
@@ -263,7 +281,7 @@ simply not the one a latency SLA expresses.
 At `τ` = 128 s under `M` = 55 s failures the job has no steady state: mean latency
 is 126 s and rising, because the backlog one failure leaves outlives the gap to
 the next — at 50 % utilisation, with capacity to spare. Bound (2) puts the ceiling
-at 72 s for these parameters; measured, `τ` = 64 s is stable at 13.6 s mean
+at 82 s for these parameters; measured, `τ` = 64 s is stable at 13.6 s mean
 latency and `τ` = 128 s is not.
 
 Raising utilisation to `ρ` = 0.80 changes the character of the problem rather than
@@ -299,7 +317,7 @@ limit — and the two answers separate by 3× at an MTBF of an hour and 5× at a
 day. Two measurements matter as much as
 the exponent: a checkpoint delays 5.8× more record-seconds than the capacity it
 consumes, so a rule calibrated in capacity is calibrated in the wrong currency;
-and the outage a record experiences is 4.1 s where the engine reports 1.25 s.
+and the outage a record experiences is 4.3 s where the engine reports 1.2 s.
 Both push the right interval down, and both are invisible to the classical
 derivation.
 
@@ -309,7 +327,8 @@ derivation.
   at three MTBFs with the measured points at `M` = 55 s and the classical rule's
   choice marked.
 - **Fig. 2** `fig3_area_validation` — measured episode cost against the
-  parameter-free prediction, log-log, 36 episodes over two decades.
+  parameter-free prediction, log-log, pooled over three state sizes and spanning
+  two decades of cost.
 - **Fig. 3** `fig2_scaling` — optimal interval against MTBF for both objectives,
   with the region above bound (2) shaded.
 
