@@ -313,6 +313,27 @@ figure for a small cluster — the classical rule picks an interval 2.2–3.1× 
 long; at one day, 3.4–4.9× too long. Every one of those seconds is added
 directly to the tail latency of the next failure.
 
+### 5.5a The other objective, measured rather than assumed
+
+To keep the comparison honest we measure the wasted-work objective on the same
+runs instead of only deriving it. Redundant processing — records the job reads a
+second time after a rewind — is the difference between what the sink emitted and
+what the generator produced:
+
+| `tau` (s) | 2 | 8 | 16 | 32 | 64 | 128 |
+|---|---|---|---|---|---|---|
+| mean checkpoint age at failure (s) | 1.0 | 2.9 | 10.0 | 21.3 | 30.6 | 45.2 |
+| redundant processing (%) | 2.9 | 8.4 | 22.3 | 28.4 | 32.5 | 76.5 |
+| `age`/`M` prediction (%) | 1.6 | 4.8 | 18.7 | 22.2 | 25.5 | 84.7 |
+
+The measured overhead runs 0.9–2.1× the `age/M` prediction (median 1.3×); the
+excess is in-flight work between the last barrier and the failure, which the
+first-order accounting ignores. At `tau` = 64 s a third of the cluster's capacity
+is going into reprocessing — a large number, and still the interval the classical
+rule would pick at a one-hour MTBF is only 39.9 s away from it. The wasted-work
+objective is real and measurable; it simply is not the objective a latency SLA
+expresses.
+
 ### 5.6 Beyond a threshold the job never catches up
 
 At `tau` = 128 s under `M` = 55 s failures the job does not have a steady state at
