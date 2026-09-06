@@ -11,21 +11,34 @@
 
 Fault-tolerant stream processors checkpoint periodically, and the interval is
 almost always chosen with a rule inherited from batch and HPC computing: the
-Young/Daly optimum, which balances checkpoint cost against the work lost to a
-failure and grows as the square root of the mean time between failures. We show
-that this rule answers the wrong question for a latency-sensitive streaming job.
-In a stream processor with a durable source, a failure does not destroy work — it
-*rewinds* the source, and the rewound records must be re-read through whatever
-service capacity is left over after the live input is served. The cost of a
-failure is therefore an area of accumulated backlog, not a quantity of lost work,
-and the two objectives are minimised at different intervals with different
-scaling exponents: the wasted-work optimum grows as `M^{1/2}`, the latency
-optimum as `M^{1/3}`. We derive both, and measure them on a Flink 1.20 cluster
-with a Kafka source under injected TaskManager failures. On a Flink 1.20 / Kafka 3.9 deployment the measured optimum sits at 4.4 s where the classical rule says 4.9 s at a 55 s MTBF and 39.9 s at a one-hour MTBF, against a latency optimum of 18.4 s; the failure cost of an episode is predicted from measured quantities alone with R² = 0.998.
-We also find that the headroom available during recovery is not the nominal
-headroom: immediately after a restore the state backend is cold, and the measured
-catch-up rate is 10 %, and 28 % when checkpointing is continuous, below the steady-state service rate, which makes a
-failure substantially more expensive than the nominal figures predict.
+Young/Daly optimum, which balances checkpoint cost against work lost to a failure
+and grows as the square root of the mean time between failures. That rule answers
+the wrong question for a latency-sensitive streaming job. With a durable source a
+failure does not destroy work, it *rewinds* the source, and the rewound records
+must be re-read through whatever service capacity is left after the live input is
+served. The cost of a failure is therefore an area of accumulated backlog,
+quadratic in the age of the last checkpoint, where the classical cost is linear
+in it. The two objectives are consequently minimised at different intervals with
+different exponents — wasted work at `M^{1/2}`, latency at `M^{1/3}`.
+
+We derive both and measure every term of both on a Flink 1.20 / Kafka 3.9
+deployment under injected TaskManager failures. Across 36 failure episodes
+spanning two orders of magnitude in cost, the latency an episode adds is
+predicted from quantities measured on that same episode, with no fitted
+parameter, at R² = 0.998. The interval sweep puts the measured optimum at 4.4 s
+against a closed-form prediction of 3.5 s; at a one-hour mean time between
+failures the classical rule would pick 39.9 s where the latency optimum is 18.0 s,
+and at a one-day MTBF 195 s against 55 s.
+
+Two measurements explain most of the gap and are invisible to the classical
+derivation. A checkpoint delays 5.8× more record-seconds than the throughput it
+removes, so a rule calibrated in capacity is calibrated in the wrong currency —
+and the checkpoint cost enters the optimum squared. And the outage a record
+actually experiences is 4.1 s where the engine reports 1.25 s, the difference
+being the ramp back to service after "restored". We also identify a ceiling the
+classical rule cannot express: past a computable interval the recovery backlog
+outlives the gap to the next failure and the job never returns to a steady state,
+at 50 % utilisation and with capacity to spare.
 
 ---
 
