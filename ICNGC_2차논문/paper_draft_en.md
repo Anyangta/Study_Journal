@@ -124,49 +124,80 @@ job an amount that grows quadratically with how stale its last checkpoint was.
 ## 3. Model
 
 Let `a` be the age of the last completed checkpoint when the failure occurs.
-Failures are independent of the checkpoint schedule, so `a ~ U(0, τ)` and
-`E[(a+D)^2] = τ^2/3 + τD + D^2`.
+Failures are independent of the checkpoint schedule, so `a ~ U(0, τ)`.
 
-**Checkpoint term.** Treating a checkpoint as an equivalent stall of `δ` seconds,
-the backlog rises to `λδ` and drains at `μ − λ`; the area is
-`λδ^2 / (2(1−ρ))` per checkpoint, so per unit time it is `λδ^2 / (2(1−ρ)τ)`.
+**What the objective is.** We take the objective to be the mean end-to-end
+latency over the records the job emits — the quantity a latency SLA is written
+against, and the one a sink or a lag dashboard reports. This choice matters for
+the arithmetic. During catch-up the job serves records at its full rate `μ_d`,
+not at the arrival rate `λ`, so the number of records that experience the
+elevated latency is larger than `λ` times the episode length by exactly the ratio
+`μ_d/λ`. Summing latency over records therefore gives `μ_d/λ` times the
+time-integrated backlog; getting this factor wrong costs a factor of two, as we
+found when the first version of this model sat consistently below the
+measurements by 1.99× against a measured `μ_d/λ` of 1.79.
 
-**Failure term.** Per failure, the area is
-`λD^2/2 + λ^2 E[(a+D)^2] / (2(μ−λ))`, incurred once every `M` seconds.
-
-Dividing by `λ` (Little's law) gives mean end-to-end latency:
+**Failure term.** After the restart the oldest surviving record is `a + D` seconds
+old, where `D` is the *effective* outage — everything between the failure and the
+job serving at rate again, not the interval the engine labels as restore (§5.3).
+The backlog `λ(a + D)` drains at `μ_d − λ`, and over that drain the job emits
+records at `μ_d`, so the latency summed over records is
 
 ```
-Lbar(τ) = l0 + δ² / (2(1−ρ)τ)  +  [ D²/2 + λ(τ²/3 + τD + D²) / (2(μ−λ)) ] / M
+A = μ_d λ E[(a+D)²] / (2 (μ_d − λ)),    E[(a+D)²] = τ²/3 + τD + D²
 ```
 
-Setting `dLbar/dτ = 0`, the factor `(1−ρ)` cancels from both terms and the
-condition reduces to
+**Checkpoint term.** Treating a checkpoint as an equivalent stall of `δ` seconds
+gives a backlog `λδ` draining at `μ − λ`, contributing `δ²/(2(1−ρ)τ)` seconds of
+mean latency per unit time. We measure `δ` rather than assuming it, and §5.2
+shows that the right `δ` for this term is not the capacity a checkpoint consumes.
+
+**The optimum.** Writing `ρ = λ/μ` and `ρ_d = λ/μ_d`,
 
 ```
-δ² M = ρ τ² ( 2τ/3 + D )                                    (1)
+Lbar(τ) = l0 + δ²/(2(1−ρ)τ) + μ_d (τ²/3 + τD + D²) / (2 (μ_d − λ) M)
 ```
 
-Two regimes follow. When the fixed downtime is small relative to the checkpoint
-age (`D ≪ τ`), `τ* = (1.5 δ² M / ρ)^{1/3}` — a **cube root** of the mean time
-between failures. When the fixed downtime dominates (`D ≫ τ`),
-`τ* = δ sqrt(M / (ρD))` — a square root again, but with a different constant than
-the classical rule. Utilisation does not change the *shape* of the optimum, only
-its position through the explicit `ρ` in (1); it does, however, scale the whole
-cost, since both terms carry `1/(1−ρ)`.
+and `dLbar/dτ = 0` gives
 
-**The other objective.** If instead we account in capacity, as the classical
-derivation does, then per unit time the job spends `δ/τ` on checkpoints and
-`(D + ρτ/2)/M` on failures (the re-read of `λτ/2` records occupies `ρτ/2`
-seconds of capacity). Minimising gives
+```
+δ² M (1−ρ_d)/(1−ρ) = τ² ( 2τ/3 + D )                        (1)
+```
+
+Two regimes follow. When the effective outage is small next to the checkpoint age
+(`D ≪ τ`), `τ* ≈ (1.5 δ² M)^{1/3}` — a **cube root** of the mean time between
+failures. When the outage dominates (`D ≫ τ`), `τ* ≈ δ sqrt(M/D)` — a square root
+again, but with a constant the classical rule does not have. Note what is *not*
+in (1): utilisation nearly cancels, since `μ_d ≈ μ` makes `(1−ρ_d)/(1−ρ) ≈ 1`.
+Utilisation does not move the optimum much; it scales the cost at the optimum,
+and — as §5.6 shows — it collapses the range of intervals that work at all.
+
+**The other objective.** Accounting in capacity instead, as the classical
+derivation does, the job spends `δ/τ` on checkpoints and `(D + ρτ/2)/M` on
+failures, the re-read of `λτ/2` records occupying `ρτ/2` seconds of capacity.
+Minimising gives
 
 ```
 τ*_waste = sqrt( 2 δ M / ρ )                                (2)
 ```
 
-which is Young/Daly with a utilisation correction. Equations (1) and (2) are the
-two answers the same system gives to two different questions, and their ratio
-grows without bound in `M`.
+which is Young/Daly with a utilisation correction; the classical form
+`sqrt(2 δ M)` is the `ρ = 1` case. Equations (1) and (2) are the two answers the
+same system gives to two different questions. Their ratio grows without bound in
+`M`, and §5.5 measures both.
+
+**A ceiling that neither optimum expresses.** Independently of which interval is
+best, an interval is only usable if the backlog one failure leaves is drained
+before the next failure arrives:
+
+```
+λ (τ/2 + D) / (μ_d − λ) + D  <  M                            (3)
+```
+
+Above that bound the job has no steady state at all. This is not a capacity
+condition — it binds at utilisations far below one — and it is the constraint the
+classical rule is most dangerous about, since it recommends an interval that
+grows as `sqrt(M)` while the bound in (3) is what actually has to hold.
 
 ## 4. Measurement setup
 
