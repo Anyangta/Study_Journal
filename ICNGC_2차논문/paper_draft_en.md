@@ -19,7 +19,8 @@ must be re-read through whatever service capacity is left after the live input i
 served. The cost of a failure is therefore an area of accumulated backlog,
 quadratic in the age of the last checkpoint, where the classical cost is linear
 in it. The two objectives are consequently minimised at different intervals with
-different exponents — wasted work at `M^{1/2}`, latency at `M^{1/3}`.
+different exponents — wasted work at `M^{1/2}` exactly, latency at an exponent
+that falls from 0.43 to 0.34 across the practical range and tends to 1/3.
 
 We derive both and measure every term of both on a Flink 1.20 / Kafka 3.9
 deployment under injected TaskManager failures. Across 36 failure episodes
@@ -69,8 +70,9 @@ setting the failure penalty is proportional to the checkpoint age; in streaming
 it is proportional to the *square* of the checkpoint age, because the backlog
 built up over that age has to be drained, and the area under the backlog curve —
 which is what an end-to-end latency SLA actually sees — is quadratic in the peak.
-Differentiating a cost with a quadratic term instead of a linear one moves the
-optimum from a square root to a cube root of `M`.
+Differentiating a cost with a quadratic term instead of a linear one drives the
+optimum below the classical square root of `M`, to a cube root once the interval
+outgrows the outage and to something between the two before that.
 
 This is not a small correction. The two rules agree at one point and diverge
 everywhere else, and they diverge in the direction that matters: as the cluster
@@ -351,8 +353,11 @@ runs at `M` = 55 s put the minimum mean latency at an achieved interval of 4.4 s
 — one grid step from the predicted 3.5 s.
 
 The gap to the classical rule is small when failures are frequent and grows
-without bound as the cluster becomes reliable, because one answer grows as
-`M^{1/2}` and the other as `M^{1/3}`. At an MTBF of one hour — an unremarkable
+without bound as the cluster becomes reliable, because the wasted-work answer
+grows as `M^{1/2}` exactly while the latency answer grows more slowly. Its local
+exponent is 0.428 at `M` = 55 s, 0.390 at 10 min, 0.370 at 1 h and 0.350 at
+1 day, tending to 1/3 from above; the cube root is the asymptote, not the
+exponent over the range anyone operates in. At an MTBF of one hour — an unremarkable
 figure for a small cluster — the classical rule picks an interval 2.2–3.1× too
 long; at one day, 3.4–4.9× too long. Every one of those seconds is added
 directly to the tail latency of the next failure.
@@ -432,9 +437,10 @@ The interval question for a stream processor is not the batch question with
 different constants. A durable source turns lost work into replayed work, replay
 competes with live arrivals for the same capacity, and the cost that a latency
 SLA feels is the area under the resulting backlog — quadratic in the checkpoint
-age where the batch cost is linear. The optimum accordingly grows as the cube
-root of the mean time between failures rather than the square root, and the two
-answers separate by 3× at an MTBF of an hour and 5× at a day.
+age where the batch cost is linear. The optimum accordingly grows strictly more
+slowly than the square root of the mean time between failures — exponent 0.43
+falling to 0.35 over the practical range, 1/3 in the limit — and the two answers
+separate by 3× at an MTBF of an hour and 5× at a day.
 
 Two measurement results matter as much as the exponent. A checkpoint delays 5.8×
 more record-seconds than the capacity it consumes, so a rule calibrated in

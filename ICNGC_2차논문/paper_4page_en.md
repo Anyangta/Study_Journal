@@ -15,8 +15,9 @@ question here. With a durable source a failure does not destroy work, it rewinds
 the source, and the rewound records must be re-read through whatever capacity is
 left after the live input is served. The cost of a failure is therefore an area
 of accumulated backlog, quadratic in the age of the last checkpoint where the
-classical cost is linear, and the latency-optimal interval grows as `M^{1/3}`
-rather than `M^{1/2}`. We derive this and measure every term of it on Flink 1.20
+classical cost is linear, and the latency-optimal interval grows strictly more slowly than
+`M^{1/2}`, with an exponent that falls from 0.43 to 0.34 over the practical
+range of failure rates and approaches 1/3 asymptotically. We derive this and measure every term of it on Flink 1.20
 with a Kafka source under injected TaskManager failures. Across 36 episodes
 spanning two orders of magnitude in cost, the latency an episode adds is
 predicted from quantities measured on that same episode, with no fitted
@@ -48,9 +49,10 @@ That changes the shape of the cost, not just its constants. The classical failur
 penalty is proportional to the checkpoint age; here the backlog built over that
 age has to be drained, and the area under the backlog curve — which is what an
 end-to-end latency SLA sees — is quadratic in it. A quadratic term where the
-classical derivation has a linear one moves the optimum from a square root of `M`
-to a cube root. The two rules agree at one point and diverge everywhere else, in
-the direction that matters: the more reliable the cluster, the further the
+classical derivation has a linear one drives the optimum below the classical
+square root — to a cube root once the interval outgrows the outage, and to
+something between the two before that. The two rules agree at one point and
+diverge everywhere else, in the direction that matters: the more reliable the cluster, the further the
 classical rule pushes the interval past what a latency-sensitive job can afford.
 
 We contribute (i) a latency model of interval selection for stream processing
@@ -98,7 +100,10 @@ and `dLbar/dτ = 0` gives
 ```
 
 For `D ≪ τ`, `τ* ≈ (1.5 δ² M)^{1/3}` — a cube root. For `D ≫ τ`,
-`τ* ≈ δ sqrt(M/D)` — a square root with a constant the classical rule lacks.
+`τ* ≈ δ sqrt(M/D)` — a square root, but with a constant the classical rule
+lacks. Real deployments sit in the crossover: with the `δ` and `D` we measure,
+the local exponent is 0.43 at a 55 s MTBF and 0.35 at a one-day MTBF, reaching
+1/3 only when `τ*` is tens of times `D` (§4.5).
 Utilisation nearly cancels in (1) since `μ_d ≈ μ`; it does not move the optimum
 much, but it scales the cost at the optimum and, as §4.5 shows, collapses the
 range of intervals that work at all.
@@ -240,8 +245,11 @@ The closed form agrees with the optimum obtained by composing the measured terms
 to within 3 % at every `M`, and the seven runs at `M` = 55 s put the measured
 minimum at an achieved interval of 4.4 s — one grid step from the predicted 3.5 s
 (Fig. 1). The gap to the classical rule is modest when failures are frequent and
-grows without bound as the cluster becomes reliable, because one answer grows as
-`M^{1/2}` and the other as `M^{1/3}` (Fig. 3).
+grows without bound as the cluster becomes reliable, because the wasted-work
+answer grows as `M^{1/2}` exactly while the latency answer grows more slowly
+(Fig. 3). Its local exponent `d log τ*/d log M` is 0.428 at `M` = 55 s, 0.390 at
+10 min, 0.370 at 1 h, 0.350 at 1 day, and tends to 1/3 from above — the cube root
+is the asymptote, not the exponent over the range anyone operates in.
 
 To keep the comparison honest we also measure the wasted-work objective rather
 than only deriving it. Redundant processing — records read a second time after a
@@ -285,9 +293,10 @@ The interval question for a stream processor is not the batch question with
 different constants. A durable source turns lost work into replayed work, replay
 competes with live arrivals for the same capacity, and the cost a latency SLA
 feels is the area under the resulting backlog — quadratic in the checkpoint age
-where the batch cost is linear. The optimum grows as the cube root of the mean
-time between failures rather than the square root, and the two answers separate
-by 3× at an MTBF of an hour and 5× at a day. Two measurements matter as much as
+where the batch cost is linear. The optimum grows strictly more slowly than the
+square root — exponent 0.43 falling to 0.35 over the practical range, 1/3 in the
+limit — and the two answers separate by 3× at an MTBF of an hour and 5× at a
+day. Two measurements matter as much as
 the exponent: a checkpoint delays 5.8× more record-seconds than the capacity it
 consumes, so a rule calibrated in capacity is calibrated in the wrong currency;
 and the outage a record experiences is 4.1 s where the engine reports 1.25 s.
