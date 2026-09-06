@@ -197,7 +197,7 @@ backlog areas the model is written in.
 with no consumer attached, then start the job from the earliest offset and read
 off the drain rate. That is the `μ` the model's catch-up term refers to, measured
 rather than inferred. Holding the spin loop fixed at 32 000 iterations, `μ` stays
-within 96 858–112 480 records/s (14 %) across an 8× change in state size, so state size moves `δ` and
+within 93 384–112 469 records/s (a 17 % spread) across an 8× change in state size, so state size moves `δ` and
 `D` while leaving `μ` and `ρ` alone.
 
 **Failure injection.** At Poisson-distributed times (minimum gap 40 s, so no two
@@ -282,7 +282,7 @@ A = mu_d * lambda * peak² / (2 (mu_d - lambda))
 
 Across 36 episodes spanning two orders of magnitude in cost (1.4 to 143 million
 record·s) the prediction tracks the measurement with **R² = 0.998** and a median
-ratio of **1.14** (median relative error 24.7 %). Regressing the measured excess
+ratio of **1.14** (median relative error 14.6 %). Regressing the measured excess
 on `(a + D)²`, where `a` is the actual age of the last completed checkpoint at
 the moment of the kill, gives R² = 0.999 and a slope 0.937× the parameter-free
 prediction. The quadratic form is not an assumption that survived — it is the
