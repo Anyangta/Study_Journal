@@ -51,32 +51,28 @@ checkpoint, so there is an interior optimum — and the classical answer,
 [REF: Daly 2006]
 
 The inheritance does not survive inspection. Young and Daly assume a failure
-destroys the work done since the last checkpoint and that this work is redone at
-the rate it was first done. In a stream processor fed by a durable log, neither
-holds. The work is not destroyed: the source rewinds to the offset in the
-checkpoint and the records are read again. And the re-reading does not get the
-machine to itself — the input keeps arriving during the outage and during the
-catch-up, so replay runs on the capacity left over after the live stream is
-served.
+destroys the work since the last checkpoint and that it is redone at the rate it
+was first done. Fed by a durable log, neither holds: the source rewinds and the
+records are read again, and that re-reading does not get the machine to itself,
+because input keeps arriving throughout the outage and the catch-up.
 
 That changes the shape of the cost, not just its constants. The classical failure
-penalty is proportional to the checkpoint age; here the backlog built over that
-age has to be drained, and the area under the backlog curve — which is what an
-end-to-end latency SLA sees — is quadratic in it. A quadratic term where the
-classical derivation has a linear one drives the optimum below the classical
-square root — to a cube root once the interval outgrows the outage, and to
-something between the two before that. The two rules agree at one point and
-diverge everywhere else, in the direction that matters: the more reliable the cluster, the further the
-classical rule pushes the interval past what a latency-sensitive job can afford.
+penalty is linear in the checkpoint age; here the backlog built over that age has
+to be drained, and the area under it — what an end-to-end latency SLA sees — is
+quadratic. A quadratic term where the classical derivation has a linear one
+drives the optimum below the square root, to a cube root once the interval
+outgrows the outage. The two rules agree at one point and diverge everywhere
+else, in the direction that matters: the more reliable the cluster, the further
+the classical rule pushes the interval past what a latency-sensitive job can
+afford.
 
-We contribute (i) a latency model of interval selection for stream processing
-with a durable source, and a stability bound that neither classical rule can
-express; (ii) a measurement of every term of that model on a real Flink/Kafka
-deployment, with the service rate held fixed while state size varies 8× so that
-checkpoint cost and restore cost move independently of utilisation; and (iii) two
-measurement results that shift the answer by more than the exponent does — the
-gap between what a checkpoint costs in capacity and what it costs in latency, and
-the gap between the outage the engine reports and the one a record experiences.
+We contribute (i) a latency model of interval selection for a stream processor
+with a durable source, plus a stability bound neither classical rule can express;
+(ii) a measurement of every term of it on a real Flink/Kafka deployment, with the
+service rate held fixed while state size varies 8×; and (iii) two measurements
+that shift the answer by more than the exponent does — what a checkpoint costs in
+capacity versus in latency, and the outage the engine reports versus the one a
+record experiences.
 
 ## 2. Model
 
@@ -86,11 +82,11 @@ interval, `a` the age of the last completed checkpoint when a failure lands, and
 rate again. Failures are independent of the checkpoint schedule, so
 `a ~ U(0, τ)` and `E[(a+D)²] = τ²/3 + τD + D²`.
 
-We take the objective to be the mean end-to-end latency over emitted records —
-what a lag dashboard reports and what an SLA is written against. The choice
-matters arithmetically: during catch-up the job serves at its full rate `μ_d`,
-not at `λ`, so summing latency over records gives `μ_d/λ` times the
-time-integrated backlog. Getting that factor wrong costs a factor of two.
+The objective is the mean end-to-end latency over emitted records — what a lag
+dashboard reports and what an SLA is written against. The choice matters
+arithmetically: during catch-up the job serves at `μ_d`, not `λ`, so summing over
+records gives `μ_d/λ` times the time-integrated backlog, and getting that factor
+wrong costs a factor of two.
 
 **Failure term.** After the restart the oldest surviving record is `a + D` old;
 the backlog `λ(a+D)` drains at `μ_d − λ` while the job emits at `μ_d`, so the
@@ -113,14 +109,11 @@ and `dLbar/dτ = 0` gives
 δ² M (1−ρ_d)/(1−ρ) = τ² (2τ/3 + D)                              (1)
 ```
 
-For `D ≪ τ`, `τ* ≈ (1.5 δ² M)^{1/3}` — a cube root. For `D ≫ τ`,
-`τ* ≈ δ sqrt(M/D)` — a square root, but with a constant the classical rule
-lacks. Real deployments sit in the crossover: with the `δ` and `D` we measure,
-the local exponent is 0.43 at a 55 s MTBF and 0.35 at a one-day MTBF, reaching
-1/3 only when `τ*` is tens of times `D` (§4.5).
-Utilisation nearly cancels in (1) since `μ_d ≈ μ`; it does not move the optimum
-much, but it scales the cost at the optimum and, as §4.5 shows, collapses the
-range of intervals that work at all.
+For `D ≪ τ` this is a cube root, `τ* ≈ (1.5 δ² M)^{1/3}`; for `D ≫ τ` a square
+root, `τ* ≈ δ sqrt(M/D)`, but with a constant the classical rule lacks. Real
+deployments sit in the crossover (§4.5). Utilisation nearly cancels in (1) since
+`μ_d ≈ μ`, so it barely moves the optimum — but it collapses the range of
+intervals that work at all (§4.6).
 
 Accounting in capacity instead, as the classical derivation does, the job spends
 `δ/τ` on checkpoints and `(D + ρτ/2)/M` on failures, giving
@@ -167,26 +160,23 @@ spread among those controls is the error bar we quote for that sweep, and the
 throughput measured during each run is reported with it.
 
 **Workload.** A generator emits fixed-rate records carrying an emission timestamp
-and a key; the job keys on that field and keeps one `ValueState` entry of
-configurable size per key. Entries are filled with a key-derived pseudo-random
-pattern: a zero-filled payload is squashed by the backend's compression and does
-not produce the checkpoint size configured — 200 MB of logical state checkpointed
-as 36 MB before we caught this. A per-record spin loop sets the service rate;
-without it the pipeline sustains over 10⁶ records/s and the harness, not the
-system under test, is the bottleneck. Holding the spin fixed, `μ` stays within
+and a key; the job keys on that field and holds one `ValueState` entry per key.
+Entries carry a key-derived pseudo-random pattern, because a zero-filled payload
+is squashed by the backend's compression and does not produce the checkpoint size
+configured — 200 MB of logical state checkpointed as 36 MB before we caught it. A
+per-record spin loop sets the service rate; without it the harness, not the system
+under test, is the bottleneck. With the spin fixed, `μ` stays within
 93 384–112 469 records/s across an 8× change in state size, so state size moves
 `δ` and `D` while leaving `μ` and `ρ` alone.
 
 **Instrumentation.** Flink's `numRecordsOutPerSecond` and `records-lag-max` are
-60-second moving averages and cannot resolve a checkpoint or a restart, so we do
-not use them quantitatively. The operator instead emits, every 500 ms per
-subtask, the count of records it processed and the distribution of their
-`now − emission_timestamp` latency; those summaries are the primary instrument,
-and record-weighted means over them are, by Little's law, the backlog areas the
-model is written in. The driver polls the REST API at 4 Hz for job state and
-checkpoint events only. Service rates are calibrated by pre-filling a Kafka
-backlog with no consumer attached and reading the drain rate — the `μ` the
-catch-up term refers to, measured rather than inferred.
+60-second moving averages and cannot resolve a checkpoint or a restart, so the
+operator instead emits, every 500 ms per subtask, its processed count and the
+distribution of `now − emission_timestamp`; record-weighted means over those are,
+by Little's law, the backlog areas the model is written in. The REST API is
+polled at 4 Hz for job state and checkpoint events only. Service rates are
+calibrated by draining a pre-filled Kafka backlog with no consumer attached —
+the `μ` the catch-up term refers to, measured rather than inferred.
 
 **Failures.** At Poisson times (minimum gap 40 s, so episodes do not overlap) the
 driver `kill -9`s a TaskManager hosting tasks and immediately starts a
@@ -204,14 +194,13 @@ in runs where an episode is well defined (§4.4).
 
 ### 4.1 The interval has a floor
 
-Between 8 s and 64 s the steady-state latency falls as `1/τ` exactly as the model
-says, from 265 ms to 98 ms, converging on a floor of `l0` = 57 ms (R² = 0.950).
-Below about 8 s it turns around — 696 ms at `τ` = 4 s, 622 ms at 2 s — because a
-checkpoint takes 2.1–2.8 s and one disturbance never drains before the next
-begins. **The usable interval is bounded below by roughly twice the checkpoint
-duration**, which is not a free parameter but a consequence of state size and
-store bandwidth. Extrapolating the `1/τ` term below that bound, as the classical
-rule implicitly does, promises a benefit the system cannot deliver.
+Steady-state latency falls as `1/τ` from 265 ms to 98 ms over `τ` = 8–64 s,
+converging on `l0` = 57 ms (R² = 0.950), then turns back up below about 8 s
+because a checkpoint takes 2.1–2.8 s and one disturbance no longer drains before
+the next begins. **The usable interval is bounded below by roughly twice the
+checkpoint duration** — not a free parameter but a consequence of state size and
+store bandwidth — so extrapolating the `1/τ` term below that bound, as the
+classical rule implicitly does, promises a benefit the system cannot deliver.
 
 ### 4.2 A checkpoint delays 5.8× more than it costs
 
@@ -257,12 +246,10 @@ at the kill, gives R² = 0.999 and a slope **1.001×** the parameter-free value.
 The quadratic form is not an assumption that survived; it is the form the data
 has.
 
-Episodes are counted only where a steady level exists to measure excess against:
-runs whose interval is below twice the checkpoint duration, and runs that never
-returned to a steady level, are reported separately (§4.1, §4.6) rather than
-pooled. Including them halves the apparent agreement — the slope moves to 0.94
-and the 400 MB arm's R² to 0.95 — which is itself a warning about validating a
-recovery model on runs that never recovered.
+Episodes count only where a steady level exists to measure excess against;
+saturated and never-recovered runs are reported separately (§4.1, §4.6) rather
+than pooled. Including them moves the slope to 0.94 — a warning about validating
+a recovery model on runs that never recovered.
 
 The prediction transfers across state size. At 100 MB the slope is 1.036× with
 R² = 0.998, while `δ` falls from 1.277 s to 0.842 s and `D` from 4.28 s to
@@ -293,12 +280,10 @@ answer grows as `M^{1/2}` exactly while the latency answer grows more slowly
 10 min, 0.370 at 1 h, 0.350 at 1 day, and tends to 1/3 from above — the cube root
 is the asymptote, not the exponent over the range anyone operates in.
 
-To keep the comparison honest we also measure the wasted-work objective rather
-than only deriving it. Redundant processing — records read a second time after a
-rewind — rises from 2.9 % at `τ` = 2 s to 32.5 % at `τ` = 64 s, within 0.9–2.1×
-of the `age/M` prediction (median 1.3×; the excess is in-flight work between the
-last barrier and the failure). That objective is real and measurable. It is
-simply not the one a latency SLA expresses.
+We measure the wasted-work objective rather than only deriving it: redundant
+processing rises from 2.9 % at `τ` = 2 s to 32.5 % at 64 s, within 0.9–2.1× of
+the `age/M` prediction. That objective is real and measurable — it is simply not
+the one a latency SLA expresses.
 
 ### 4.6 A ceiling, and what utilisation does to it
 
@@ -320,16 +305,16 @@ checkpoint interval**, and the ceiling for this configuration lies between 0.5 a
 
 ## 5. Limitations and conclusion
 
-**One machine.** The second node of the intended testbed was lost before this work
-began and cannot be power-cycled remotely. The cluster is one JobManager, three
-TaskManagers and a broker as separate pinned processes on one host. Process
-failure, state restore, source rewind and catch-up are all real; what is missing
-is network distance between a failed task and its replacement, which would add to
-`D` and move the optimum up. Our numbers are the optimistic end. **One failure
-mode** (`kill -9` of a TaskManager), **one workload shape**, and a **shared host**
-whose background load we pin around but cannot remove. `δ` is fitted from four
-points, with the saturated and unstable runs excluded on stated criteria and
-reported rather than dropped.
+**One machine.** The intended second node was lost before this work began and
+cannot be power-cycled remotely, so the cluster is a JobManager, three
+TaskManagers and a broker as pinned processes on one host: process failure, state
+restore, source rewind and catch-up are all real, but network distance between a
+failed task and its replacement is missing, and it would add to `D` and move the
+optimum up — our numbers are the optimistic end. One failure mode (`kill -9` of a
+TaskManager), one workload shape, and a shared host whose background load we pin
+around but cannot remove and whose disk throughput is not stationary (§3). `δ` is
+fitted from the unsaturated, stable runs, with the excluded ones reported on
+stated criteria rather than dropped.
 
 The interval question for a stream processor is not the batch question with
 different constants. A durable source turns lost work into replayed work, replay
@@ -345,19 +330,31 @@ and the outage a record experiences is 4.3 s where the engine reports 1.2 s.
 Both push the right interval down, and both are invisible to the classical
 derivation.
 
-## Figures
+## Figure captions
 
-- **Fig. 1** `fig1_latency_vs_tau` — mean latency against interval, model curves
-  at three MTBFs with the measured points at `M` = 55 s and the classical rule's
-  choice marked.
-- **Fig. 2** `fig3_area_validation` — measured episode cost against the
-  parameter-free prediction, log-log, pooled over three state sizes and spanning
-  two decades of cost.
-- **Fig. 3** `fig2_scaling` — optimal interval against MTBF for both objectives,
-  with the region above bound (2) shaded.
+**Fig. 1** (`fig1_latency_vs_tau`). Mean end-to-end latency against the interval
+actually achieved, reference workload, failures at one per 55 s. Points are
+measured runs, one per requested interval; curves are (1) at three MTBFs,
+evaluated from `δ` and `D` fitted without reference to these points. The arrow
+marks the interval the wasted-work rule selects. The minimum is flat to its right
+and steep to its left, so overshooting the interval is cheap and undershooting is
+not.
 
-(`fig0_trace` — one failure episode's latency and throughput — is the clearest
-picture of the mechanism and should replace Fig. 2 if space allows only three.)
+**Fig. 2** (`fig3_area_validation`). Measured excess-backlog area per failure
+episode against the parameter-free prediction `μ_d λ peak²/(2(μ_d − λ))`,
+log–log, one point per episode, pooled over three state sizes and spanning two
+decades of episode cost. The line is `y = x`, not a fit: every quantity on the
+right is measured on the same episode as the left.
+
+**Fig. 3** (`fig2_scaling`). Optimal interval against MTBF for both objectives,
+log axes. The shaded region lies above the stability bound (2), where the backlog
+one failure leaves outlives the gap to the next and no steady state exists. The
+wasted-work answer grows as `M^{1/2}` and walks into that region; the latency
+answer grows more slowly and does not.
+
+(`fig0_trace` — latency and throughput through a single failure episode, showing
+the checkpoint age, the outage and the catch-up ramp — is the clearest single
+picture of the mechanism and should replace Fig. 2 if only three figures fit.)
 
 ## References
 
