@@ -1,0 +1,247 @@
+% =====================================================================
+%  ICNGC 2차 논문 - LaTeX 골격
+%
+%  이 파일은 "구조와 환경"만 갖춘 뼈대입니다.  본문 내용은
+%  ../ICNGC_2차논문/paper_4page_en.md 에서 가져오세요.
+%
+%  ── 쓰는 법 ────────────────────────────────────────────────────
+%  1. ICNGC가 자체 템플릿(.tex 또는 .docx)을 제공하면 **그걸 쓰세요.**
+%     이 파일은 학회 템플릿이 IEEEtran 계열일 때의 출발점입니다.
+%  2. 학회 템플릿의 \documentclass 줄과 여백 설정은 **절대 바꾸지 마세요.**
+%     분량이 안 맞으면 글을 줄입니다.  (00_논문작성_가이드.md 5절)
+%  3. TODO: 로 표시된 곳이 채워야 할 자리입니다.
+%  4. 수치는 아직 재측정 중입니다.  \newcommand 로 한 곳에 모아뒀으니
+%     확정되면 **거기만** 고치면 본문 전체가 따라갑니다.
+% =====================================================================
+
+\documentclass[conference]{IEEEtran}
+
+\usepackage{booktabs}      % 표: \toprule \midrule \bottomrule (세로줄 금지)
+\usepackage{siunitx}       % 숫자 소수점 정렬용 S 열
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
+
+\sisetup{detect-all, table-number-alignment = center}
+
+% ---------------------------------------------------------------------
+%  측정값을 한 곳에 모읍니다.  m6/m8 이 끝나면 여기만 고치세요.
+%  값의 출처: ssh icngc-a 'cd ~/icngc2_stream && python3 verify.py --update'
+% ---------------------------------------------------------------------
+\newcommand{\Dlat}{1.277}          % delta, 지연으로 잰 체크포인트 비용 (s)
+\newcommand{\Dcap}{0.221}          % delta_cap, 용량으로 잰 비용 (s)
+\newcommand{\Dratio}{5.8}          % 둘의 비
+\newcommand{\Deff}{4.28}           % D, 레코드가 겪는 실효 정지 (s)
+\newcommand{\Drep}{1.20}           % 엔진이 보고하는 정지 (s)
+\newcommand{\Rarea}{0.999}         % 무보정 에피소드 예측 R^2
+\newcommand{\Rsteady}{0.950}       % 정상 지연 적합 R^2
+\newcommand{\ExpLo}{0.43}          % 국소 지수, MTBF 55 s
+\newcommand{\ExpHi}{0.35}          % 국소 지수, MTBF 1 day
+\newcommand{\GapHour}{2.2}         % Young/Daly 대비 격차, 1시간
+\newcommand{\GapDay}{3.5}          % Young/Daly 대비 격차, 1일
+
+% ---------------------------------------------------------------------
+\begin{document}
+
+% TODO: 제목 확정.  후보는 01_논문_제목과_초록.md 참고.
+\title{Checkpoint Intervals for Stream Processing:\\
+       Why the Square Root Is the Wrong Exponent}
+
+% TODO: 저자 정보
+\author{\IEEEauthorblockN{TODO Author Name}
+\IEEEauthorblockA{TODO Department\\
+TODO University\\
+TODO email@domain}}
+
+\maketitle
+
+% =====================================================================
+\begin{abstract}
+% TODO: 01_논문_제목과_초록.md 의 초안을 붙여넣고 수치를 매크로로 교체.
+% 목표 190~200 단어.  결과 수치가 2~3개는 들어가야 합니다.
+Stream processors with exactly-once state must checkpoint, and the interval is
+left to the operator.
+% ... (나머지는 paper_4page_en.md 의 Abstract 참고)
+\end{abstract}
+
+\begin{IEEEkeywords}
+stream processing, checkpointing, fault tolerance, end-to-end latency,
+Apache Flink, performance modeling
+\end{IEEEkeywords}
+
+% =====================================================================
+\section{Introduction}
+% 4문단 공식 (00_논문작성_가이드.md 1절):
+%   1) 상황  2) 기존 답과 그게 왜 안 맞는지  3) 그래서 무엇이 달라지나
+%   4) 기여 (i)(ii)(iii)
+%
+% 관련 연구는 독립 절로 두지 말고 문단 2에 녹이세요 (4쪽이라 자리가 없음).
+% 03_관련연구와_동향.md 8절에 그 문단의 권장 형태가 있습니다.
+
+% TODO: paper_4page_en.md 의 Introduction 을 옮기고 \cite{} 를 채우기
+
+% =====================================================================
+\section{Model}
+\label{sec:model}
+
+% 기호 정의.  기호가 8개라 표로 넣는 편이 낫습니다 (자리가 되면).
+% 05_수식_유도와_이유.md 의 표를 그대로 쓸 수 있습니다.
+
+Let $\lambda$ be the arrival rate, $\mu$ the service rate, $\rho=\lambda/\mu$,
+$\tau$ the checkpoint interval, $a$ the age of the last completed checkpoint
+when a failure lands, and $D$ the effective outage. Failures are independent of
+the checkpoint schedule, so $a\sim U(0,\tau)$ and
+\begin{equation}
+  \mathbb{E}\!\left[(a+D)^2\right] = \frac{\tau^2}{3} + \tau D + D^2 .
+  \label{eq:moment}
+\end{equation}
+
+% 중요: 레코드 가중이라 mu_d/lambda 가 붙는다는 문장을 꼭 넣으세요.
+% 이걸 안 쓰면 재현하는 사람이 정확히 2배 틀립니다.
+
+The mean latency is
+\begin{equation}
+  \bar{L}(\tau) = \ell_0
+    + \frac{\delta^2}{2(1-\rho)\tau}
+    + \frac{\mu_d\,\mathbb{E}[(a+D)^2]}{2(\mu_d-\lambda)M},
+  \label{eq:objective}
+\end{equation}
+and $\mathrm{d}\bar{L}/\mathrm{d}\tau = 0$ gives
+\begin{equation}
+  \delta^2 M \frac{1-\rho_d}{1-\rho} = \tau^2\!\left(\frac{2\tau}{3}+D\right).
+  \label{eq:optimum}
+\end{equation}
+
+For $D \ll \tau$ this is a cube root, $\tau^\ast \approx (1.5\,\delta^2 M)^{1/3}$;
+for $D \gg \tau$ a square root, $\tau^\ast \approx \delta\sqrt{M/D}$, but with a
+constant the classical rule lacks.
+
+Accounting in capacity instead, as the classical derivation does, gives
+$\tau^\ast_{\text{waste}} = \sqrt{2\delta M/\rho}$. Finally, an interval is
+usable only if the backlog one failure leaves drains before the next arrives:
+\begin{equation}
+  \frac{\lambda(\tau/2 + D)}{\mu_d - \lambda} + D < M .
+  \label{eq:stability}
+\end{equation}
+Above this bound the job has no steady state.
+
+% =====================================================================
+\section{Setup}
+\label{sec:setup}
+
+% TODO: paper_4page_en.md 의 Setup 을 옮기기.
+% Drift control 문단을 빠뜨리지 마세요 - 심사자가 공용 호스트를 물어봅니다.
+
+% =====================================================================
+\section{Results}
+\label{sec:results}
+
+% TODO: paper_4page_en.md 의 Results.
+% 그림이 말하는 것을 산문으로 반복하지 마세요.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figs/fig1_latency_vs_tau.pdf}
+  \caption{Mean end-to-end latency against the interval actually achieved,
+    reference workload, failures at one per \SI{55}{\second}. Points are
+    measured runs; curves are \eqref{eq:optimum} at three MTBFs, evaluated from
+    $\delta$ and $D$ fitted without reference to these points. The arrow marks
+    the interval the wasted-work rule selects. The minimum is flat to its right
+    and steep to its left, so overshooting the interval is cheap and
+    undershooting is not.}
+  \label{fig:latency}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figs/fig3_area_validation.pdf}
+  \caption{Measured excess-backlog area per failure episode against the
+    parameter-free prediction $\mu_d\lambda\,\mathrm{peak}^2/(2(\mu_d-\lambda))$,
+    log--log, one point per episode, pooled over three state sizes and spanning
+    two decades of episode cost. The line is $y=x$, not a fit: every quantity on
+    the right is measured on the same episode as the left.}
+  \label{fig:area}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{figs/fig2_scaling.pdf}
+  \caption{Optimal interval against MTBF for both objectives, log axes. The
+    shaded region lies above the stability bound \eqref{eq:stability}, where the
+    backlog one failure leaves outlives the gap to the next and no steady state
+    exists. The wasted-work answer grows as $M^{1/2}$ and walks into that
+    region; the latency answer grows more slowly and does not.}
+  \label{fig:scaling}
+\end{figure}
+
+% ---- 표: 세로줄 없음, 단위는 헤더, 소수점 정렬 ----------------------
+\begin{table}[t]
+  \centering
+  \caption{Optimal interval under the two objectives.
+           The last column is against Young/Daly as usually quoted; the
+           $\rho$-corrected wasted-work optimum is larger still, so this is the
+           conservative comparison.}
+  \label{tab:optimum}
+  \begin{tabular}{l S[table-format=3.1] S[table-format=3.1] S[table-format=3.1] S[table-format=1.1]}
+    \toprule
+    & {latency-opt.} & {wasted-work} & {Young/Daly} & {ratio} \\
+    {MTBF} & {(\si{\second})} & {(\si{\second})} & {(\si{\second})} & \\
+    \midrule
+    \SI{30}{\second} &  2.8 &   5.1 &   3.6 & 1.3 \\
+    \SI{55}{\second} &  3.6 &   7.0 &   4.9 & 1.4 \\
+    \SI{10}{\minute} &  9.4 &  22.9 &  16.3 & 1.7 \\
+    \SI{1}{\hour}    & 18.4 &  56.2 &  39.9 & 2.2 \\
+    \SI{1}{\day}     & 56.5 & 275.3 & 195.3 & 3.5 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% =====================================================================
+\section{Limitations and Conclusion}
+
+% 한계를 쓰는 것이 신뢰를 올립니다.  지우지 마세요.
+% TODO: paper_4page_en.md 의 Limitations and conclusion 을 옮기기.
+
+% =====================================================================
+% 참고문헌
+%
+%  경고: 아래는 무엇을 인용해야 하는지에 대한 메모이지 실제 항목이 아닙니다.
+%  저자/제목/게재지/연도/쪽수를 반드시 직접 확인하고 채우세요.
+%  후보와 검증 절차는 03_관련연구와_동향.md 를 보세요.
+%  존재하지 않는 인용을 넣으면 논문 전체의 신뢰를 잃습니다.
+% =====================================================================
+\begin{thebibliography}{9}
+
+\bibitem{young}
+% TODO: J. W. Young, "A first order approximation to the optimum checkpoint
+% interval," Communications of the ACM, 1974.  --- 서지정보 직접 확인
+TODO.
+
+\bibitem{daly}
+% TODO: J. T. Daly, "A higher order estimate of the optimum checkpoint interval
+% for restart dumps," Future Generation Computer Systems, 2006.
+TODO.
+
+\bibitem{kafka}
+% TODO: J. Kreps, N. Narkhede, J. Rao, "Kafka: a distributed messaging system
+% for log processing," NetDB, 2011.
+TODO.
+
+\bibitem{abs}
+% TODO: P. Carbone et al., "Lightweight asynchronous snapshots for distributed
+% dataflows."  (Flink 의 ABS)
+TODO.
+
+\bibitem{chandylamport}
+% TODO: K. M. Chandy, L. Lamport, "Distributed snapshots: determining global
+% states of distributed systems," ACM TOCS, 1985.
+TODO.
+
+\bibitem{slo}
+% TODO: 종단 지연을 목적함수로 삼는 근거 1건.  가장 채우기 어려운 자리이고,
+% 지도교수님께 여쭤보는 것이 가장 빠릅니다.  03_관련연구와_동향.md 5절 참고.
+TODO.
+
+\end{thebibliography}
+
+\end{document}
