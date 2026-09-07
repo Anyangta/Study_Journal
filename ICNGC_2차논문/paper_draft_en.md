@@ -217,7 +217,9 @@ grows as `sqrt(M)` while the bound in (3) is what actually has to hold.
 ## 4. Measurement setup
 
 **Hardware.** One bare-metal node, Intel i9-9900K (8 physical cores, 16 threads),
-32 GB RAM, NVMe-backed root filesystem, Ubuntu 22.04, Linux 5.15. The machine is
+32 GB RAM, Ubuntu 22.04, Linux 5.15. The root filesystem, and with it the
+checkpoint store and the RocksDB working directories, is on a 2 TB SATA SSD;
+an NVMe device is present but not mounted. The machine is
 shared with unrelated lab services; a MySQL instance holds roughly one core for
 the duration and the Kubernetes control plane is resident. We pin our components
 to disjoint core sets — Kafka on cores 0–3, the JobManager on core 4,
@@ -233,20 +235,22 @@ aligned checkpoints, restart strategy fixed-delay with no delay, heartbeat
 timeout 5 s. Everything runs unprivileged out of a home directory; no kernel or
 system configuration is modified.
 
-**Drift control.** Pinning cores does not isolate the disk. Over 6 127 completed
-checkpoints on this host the median checkpoint write throughput moves from
-268 MB/s at 03:00 to 66 MB/s at 17:00 — a 4x swing at unchanged checkpoint size,
-tracking the working day of the unrelated services rather than anything we do.
-This matters more than it sounds. A sweep generated in the obvious way walks
-`tau` upward in wall-clock order, so a machine that slows through the day
-penalises the long intervals systematically and folds the drift straight into the
-curve being fitted; and at the slow end of the day a checkpoint takes 7-9 s, so
-every interval below about 16 s saturates and the short-interval half of the
-sweep stops carrying a `1/tau` signal at all. Each sweep therefore shuffles the
-interval order within a block and repeats a fixed-interval control run every four
-runs. The spread among those controls is the error bar for that sweep, the
-throughput measured during each run is recorded alongside it, and the arms the
-argument rests on are scheduled into the quiet hours.
+**Drift control.** Pinning cores does not isolate the disk, and the disk does not
+hold still. Over 10 800 completed checkpoints the median write throughput on this
+host ranges from 268 MB/s to 62 MB/s at unchanged checkpoint size — a 4x spread,
+which at 600 MB of state is the difference between a 2.2 s checkpoint and a 9 s
+one. We cannot fully attribute it. Device-level counters show that essentially
+all of the disk's write traffic during our runs is ours, so it is not another
+tenant's I/O; the fast stretches follow idle gaps and the slow ones follow many
+hours of continuous writing, which is the behaviour of a SATA SSD whose write
+cache has been exhausted. Whatever the cause, a sweep that walks `tau` upward in
+wall-clock order folds it into the very curve being fitted, and once a checkpoint
+takes 9 s every interval below about 18 s is saturated and carries no `1/tau`
+signal at all. Each sweep therefore shuffles its interval order, repeats a
+fixed-interval control run every four runs, and sets its shortest interval above
+twice the checkpoint duration the box is currently delivering; the spread among
+the controls is the error bar we quote for that sweep, and the throughput
+measured during each run is reported with it.
 
 **Workload.** A generator produces fixed-rate records carrying an emission
 timestamp and a key; the job keys by that field and maintains one `ValueState`

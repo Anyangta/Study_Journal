@@ -134,7 +134,7 @@ stop it crossing (2).
 ## 3. Setup
 
 **Cluster.** One bare-metal node: Intel i9-9900K (8 cores, 16 threads), 32 GB,
-NVMe, Ubuntu 22.04. Flink 1.20.5 standalone — one JobManager, three TaskManagers
+a 2 TB SATA SSD, Ubuntu 22.04. Flink 1.20.5 standalone — one JobManager, three TaskManagers
 of two slots, job parallelism 4, so a failure always leaves slots for an
 immediate restart — and Kafka 3.9.2 in KRaft mode, one topic of eight partitions.
 State lives in RocksDB with full checkpoints on the local filesystem;
@@ -146,16 +146,22 @@ checkpoint write throughput are logged with every sample. The intended second no
 completes TCP handshakes but no user-space service on it responds, and we have no
 out-of-band power control (§5).
 
-**Drift control.** Pinning cores does not isolate the disk. Over 6 127 completed
-checkpoints on this host the median write throughput moves from 268 MB/s at 03:00
-to 66 MB/s at 17:00 — a 4x swing at unchanged checkpoint size, tracking the
-working day of unrelated services rather than anything we do. A sweep that walks
-`tau` upward in wall-clock order folds that drift into the very curve it is
-fitting, and at the slow end of the day a checkpoint takes 7-9 s, which erases
-the short-interval half of the sweep entirely. Each sweep therefore shuffles its
-interval order and repeats a fixed-interval control run every four runs; the
-spread among those controls is the error bar we quote for that sweep, and the
-throughput measured during each run is reported with it.
+**Drift control.** Pinning cores does not isolate the disk, and the disk does not
+hold still. Over 10 800 completed checkpoints the median write throughput on this
+host ranges from 268 MB/s to 62 MB/s at unchanged checkpoint size — a 4x spread,
+which at 600 MB of state is the difference between a 2.2 s checkpoint and a 9 s
+one. We cannot fully attribute it. Device-level counters show that essentially
+all of the disk's write traffic during our runs is ours, so it is not another
+tenant's I/O; the fast stretches follow idle gaps and the slow ones follow many
+hours of continuous writing, which is the behaviour of a SATA SSD whose write
+cache has been exhausted. Whatever the cause, a sweep that walks `tau` upward in
+wall-clock order folds it into the very curve being fitted, and once a checkpoint
+takes 9 s every interval below about 18 s is saturated and carries no `1/tau`
+signal at all. Each sweep therefore shuffles its interval order, repeats a
+fixed-interval control run every four runs, and sets its shortest interval above
+twice the checkpoint duration the box is currently delivering; the spread among
+the controls is the error bar we quote for that sweep, and the throughput
+measured during each run is reported with it.
 
 **Workload.** A generator emits fixed-rate records carrying an emission timestamp
 and a key; the job keys on that field and holds one `ValueState` entry per key.
