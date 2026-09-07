@@ -459,9 +459,13 @@ write throughput swings 4x over the day. Shuffled interval order and repeated
 control runs keep that drift out of the fitted curves, but they cannot recover
 the short intervals during the hours when a checkpoint takes 7-9 s.
 
-**`delta` is fitted from four points.** The saturated (`tau` <= 4 s) and unstable
-(`tau` = 128 s) runs are excluded from that regression on stated criteria, and
-reported separately rather than dropped.
+**`delta` is fitted from the failure-free runs.** At a 55 s MTBF the job is
+failing, recovering and checkpointing almost continuously, so there is too little
+steady interval left to regress against; the failure-free runs measure the same
+term without that. Saturated runs (interval below twice the checkpoint duration),
+runs that never returned to a steady level, and runs holding fewer than five
+checkpoints are excluded on stated criteria and reported separately rather than
+dropped.
 
 ## 7. Conclusion
 

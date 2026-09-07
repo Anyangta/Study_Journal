@@ -21,25 +21,23 @@
 
 ## Abstract
 
-Stream processors checkpoint periodically, and the interval is usually chosen
-with a rule inherited from batch computing: the Young/Daly optimum, which grows
-as the square root of the mean time between failures. That rule answers the wrong
-question here. With a durable source a failure does not destroy work, it rewinds
-the source, and the rewound records must be re-read through whatever capacity is
-left after the live input is served. The cost of a failure is therefore an area
-of accumulated backlog, quadratic in the age of the last checkpoint where the
-classical cost is linear, and the latency-optimal interval grows strictly more slowly than
-`M^{1/2}`, with an exponent that falls from 0.43 to 0.34 over the practical
-range of failure rates and approaches 1/3 asymptotically. We derive this and measure every term of it on Flink 1.20
-with a Kafka source under injected TaskManager failures. Across 24 episodes
-spanning two orders of magnitude in cost, the latency an episode adds is
-predicted from quantities measured on that same episode, with no fitted
-parameter, at R² = 0.999; the measured optimum is 4.4 s against a predicted
-3.6 s, and at half the state size 2.2 s against 2.6 s. At a one-hour MTBF the
-classical rule picks 39.9 s where the latency optimum is 18.4 s. Two
-measurements explain most of the gap: a checkpoint delays 5.8× more
-record-seconds than the throughput it removes, and the outage a record
-experiences is 4.3 s where the engine reports 1.2 s.
+Stream processors with exactly-once state must checkpoint, and the interval is
+left to the operator. The advice in circulation is the classical batch rule,
+`τ* = sqrt(2 δ M)`, which assumes a failure destroys the work done since the last
+checkpoint and that the work is redone at the rate it was first done. Fed by a
+durable log, neither assumption holds: the source rewinds and the records are
+read again, and that replay competes with live arrivals for the same capacity.
+The cost of a failure is therefore the area under the backlog it leaves —
+quadratic in the checkpoint age where the classical cost is linear — so the
+optimum grows more slowly than the square root, with a local exponent of 0.43
+falling to 0.35 over the practical range. We derive the latency-optimal interval
+and a stability bound the classical rule cannot express, and measure every term
+on a Flink/Kafka deployment under injected TaskManager failures. Two measurements
+move the answer more than the exponent does: a checkpoint delays 5.8× more
+record-seconds than the capacity it consumes, and the outage a record experiences
+is 4.3 s where the engine reports 1.2 s. The failure term is predicted from
+per-episode measurements with no fitted parameter (R² = 0.999). The two rules
+separate by 2.2× at a one-hour MTBF and 3.5× at one day.
 
 ## 1. Introduction
 
@@ -259,13 +257,17 @@ R² = 0.998, while `δ` falls from 1.277 s to 0.842 s and `D` from 4.28 s to
 
 With `δ` = 1.277 s, `D` = 4.28 s, `ρ` = 0.50:
 
-| `M` | latency-optimal, closed form (1) | wasted-work | Young/Daly | ratio |
+| `M` | latency-optimal, closed form (1) | wasted-work, `ρ`-corrected | Young/Daly | Daly ÷ (1) |
 |---|---|---|---|---|
-| 30 s | 2.8 s | 5.1 s | 3.6 s | 1.9× |
-| 55 s | 3.6 s | 7.0 s | 4.9 s | 1.9× |
-| 10 min | 9.4 s | 22.9 s | 16.3 s | 2.4× |
-| 1 h | 18.4 s | 56.2 s | 39.9 s | 3.1× |
-| 1 day | 56.5 s | 275.3 s | 195.3 s | 4.9× |
+| 30 s | 2.8 s | 5.1 s | 3.6 s | 1.3× |
+| 55 s | 3.6 s | 7.0 s | 4.9 s | 1.4× |
+| 10 min | 9.4 s | 22.9 s | 16.3 s | 1.7× |
+| 1 h | 18.4 s | 56.2 s | 39.9 s | 2.2× |
+| 1 day | 56.5 s | 275.3 s | 195.3 s | 3.5× |
+
+The last column compares against Young/Daly as usually quoted; the `ρ`-corrected
+wasted-work form is larger still, so the gap in the third column is the
+conservative one.
 
 The closed form agrees with the optimum obtained by composing the measured terms
 to within 3 % at every `M`, and the seven runs at `M` = 55 s put the measured
@@ -322,7 +324,7 @@ competes with live arrivals for the same capacity, and the cost a latency SLA
 feels is the area under the resulting backlog — quadratic in the checkpoint age
 where the batch cost is linear. The optimum grows strictly more slowly than the
 square root — exponent 0.43 falling to 0.35 over the practical range, 1/3 in the
-limit — and the two answers separate by 3× at an MTBF of an hour and 5× at a
+limit — and the two answers separate by 2.2× at an MTBF of an hour and 3.5× at a
 day. Two measurements matter as much as
 the exponent: a checkpoint delays 5.8× more record-seconds than the capacity it
 consumes, so a rule calibrated in capacity is calibrated in the wrong currency;
