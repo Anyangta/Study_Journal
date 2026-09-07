@@ -1,5 +1,18 @@
 # Checkpoint Intervals for Latency-Sensitive Stream Processing
 
+> **STATUS 2026-09-07 — DELETE THIS BLOCK BEFORE SUBMISSION.**
+> Every number below §3 still comes from the pre-restart dataset and is being
+> re-measured. Re-analysis of the re-run found that the shared host's checkpoint
+> write throughput swings 4x over the day, which tilted the fitted curves, and
+> that the steady term was being fitted on failure runs where almost no steady
+> interval exists. Fitting it on the no-failure runs instead already restores
+> R2 = 0.98 (100k keys) and 0.86 (200k keys), and moves the reference arm to
+> l0 = 99 ms, delta = 1.91 s. Sweeps m6 (reference arm re-measured with shuffled
+> interval order, control runs, and held-out MTBFs of 150 s and 300 s) and m8
+> (delta against state size, four sizes) are queued into the quiet hours; the
+> results tables, Figs. 1-3 and `verify.py`'s expected values must all be
+> regenerated from them. See `논문요약/04_진행상황과_남은일.md`.
+
 *ICNGC short paper — 4 pages. Numbers are current as of the runs listed in
 `summary.csv`; `verify.py` re-derives every one of them from the raw data.
 `[REF: …]` markers are citations the author must supply.*
@@ -137,10 +150,21 @@ State lives in RocksDB with full checkpoints on the local filesystem;
 exactly-once, aligned checkpoints, no restart delay, 5 s heartbeat timeout.
 Everything runs unprivileged from a home directory. Components are pinned to
 disjoint core sets (Kafka 0–3, JobManager 4, TaskManagers 5–12, generator 13–15)
-because the host is shared with unrelated lab services; load average is logged
-with every sample. The intended second node is unreachable — it answers ICMP and
+because the host is shared with unrelated lab services; load average and
+checkpoint write throughput are logged with every sample. The intended second node is unreachable — it answers ICMP and
 completes TCP handshakes but no user-space service on it responds, and we have no
 out-of-band power control (§5).
+
+**Drift control.** Pinning cores does not isolate the disk. Over 6 127 completed
+checkpoints on this host the median write throughput moves from 268 MB/s at 03:00
+to 66 MB/s at 17:00 — a 4x swing at unchanged checkpoint size, tracking the
+working day of unrelated services rather than anything we do. A sweep that walks
+`tau` upward in wall-clock order folds that drift into the very curve it is
+fitting, and at the slow end of the day a checkpoint takes 7-9 s, which erases
+the short-interval half of the sweep entirely. Each sweep therefore shuffles its
+interval order and repeats a fixed-interval control run every four runs; the
+spread among those controls is the error bar we quote for that sweep, and the
+throughput measured during each run is reported with it.
 
 **Workload.** A generator emits fixed-rate records carrying an emission timestamp
 and a key; the job keys on that field and keeps one `ValueState` entry of

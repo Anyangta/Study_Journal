@@ -11,6 +11,7 @@ be redone on a window where the box was not drifting.
 
   drift.py table                 -- every run: time, tau, steady, MB/s
   drift.py fit <sel> [sel...]    -- refit delta on runs whose id contains sel
+  drift.py controls [sel...]     -- what the repeated fixed-tau runs say about drift
 """
 import json, math, os, re, sys, glob, datetime
 import numpy as np
@@ -148,6 +149,45 @@ def fit(runs, cks, sels):
               (min(thrs), max(thrs), max(thrs) / max(min(thrs), 1e-9)))
 
 
+def controls(runs, cks, sels):
+    """What the repeated fixed-interval runs say about the box.
+
+    mkcfg_drift.py drops a control run at one fixed tau every few runs, so the
+    sweep carries its own answer to "did the machine stay the same while this
+    curve was being measured?".  Spread among the controls is the honest error
+    bar on every other point in that sweep; if it is small the shuffled order
+    was enough and the curve can be read as measured.
+    """
+    rows = []
+    for rid, m in runs.items():
+        if "_ctl" not in rid and "_ctl_" not in rid:
+            continue
+        if sels and not all_sel(rid, sels):
+            continue
+        s_ = m.get("_s", {})
+        rows.append((m["t_start"], rid, s_.get("ckpt_gap_s"), s_.get("steady_lat_ms"),
+                     s_.get("ckpt_dur_ms"),
+                     throughput(cks, m["t_start"], m.get("t_end", 0))))
+    if not rows:
+        print("no control runs found (they carry _ctl in the run id)")
+        return
+    rows.sort()
+    print("%-44s %-12s %8s %10s %9s %8s" %
+          ("control run", "time", "tau_s", "steady_ms", "ckdur_ms", "MB/s"))
+    for t, rid, tau, st, cd, thr in rows:
+        print("%-44s %-12s %8.1f %10.1f %9.0f %8.0f" % (
+            rid[:44], datetime.datetime.fromtimestamp(t).strftime("%m-%d %H:%M"),
+            tau or float("nan"), st or float("nan"), cd or 0, thr))
+    for name, i in (("steady latency", 3), ("checkpoint duration", 4), ("throughput", 5)):
+        v = [r[i] for r in rows if r[i] and r[i] == r[i]]
+        if len(v) < 2:
+            continue
+        print("   %-20s %8.1f - %-8.1f  spread %.2fx" %
+              (name, min(v), max(v), max(v) / max(min(v), 1e-9)))
+    span = (rows[-1][0] - rows[0][0]) / 3600.0
+    print("   controls span %.1f h of the sweep" % span)
+
+
 if __name__ == "__main__":
     cks = load_checkpoints()
     runs = load_runs()
@@ -158,3 +198,5 @@ if __name__ == "__main__":
         table(runs, cks, sels)
     elif cmd == "fit":
         fit(runs, cks, sels)
+    elif cmd == "controls":
+        controls(runs, cks, sels)

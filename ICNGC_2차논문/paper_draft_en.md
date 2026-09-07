@@ -1,5 +1,18 @@
 # Checkpointing for Latency, Not for Throughput: Interval Selection in Distributed Stream Processing
 
+> **STATUS 2026-09-07 — DELETE THIS BLOCK BEFORE SUBMISSION.**
+> Every number below §3 still comes from the pre-restart dataset and is being
+> re-measured. Re-analysis of the re-run found that the shared host's checkpoint
+> write throughput swings 4x over the day, which tilted the fitted curves, and
+> that the steady term was being fitted on failure runs where almost no steady
+> interval exists. Fitting it on the no-failure runs instead already restores
+> R2 = 0.98 (100k keys) and 0.86 (200k keys), and moves the reference arm to
+> l0 = 99 ms, delta = 1.91 s. Sweeps m6 (reference arm re-measured with shuffled
+> interval order, control runs, and held-out MTBFs of 150 s and 300 s) and m8
+> (delta against state size, four sizes) are queued into the quiet hours; the
+> results tables, Figs. 1-3 and `verify.py`'s expected values must all be
+> regenerated from them. See `논문요약/04_진행상황과_남은일.md`.
+
 > **Draft status.** Sections 1–4 are written; Section 5 numbers are filled from
 > `results/summary.csv` + `results/fits.json` as runs land. Every `[REF: …]` marker is a
 > citation the author must supply — none of them are filled in by the tooling, on purpose.
@@ -220,6 +233,21 @@ aligned checkpoints, restart strategy fixed-delay with no delay, heartbeat
 timeout 5 s. Everything runs unprivileged out of a home directory; no kernel or
 system configuration is modified.
 
+**Drift control.** Pinning cores does not isolate the disk. Over 6 127 completed
+checkpoints on this host the median checkpoint write throughput moves from
+268 MB/s at 03:00 to 66 MB/s at 17:00 — a 4x swing at unchanged checkpoint size,
+tracking the working day of the unrelated services rather than anything we do.
+This matters more than it sounds. A sweep generated in the obvious way walks
+`tau` upward in wall-clock order, so a machine that slows through the day
+penalises the long intervals systematically and folds the drift straight into the
+curve being fitted; and at the slow end of the day a checkpoint takes 7-9 s, so
+every interval below about 16 s saturates and the short-interval half of the
+sweep stops carrying a `1/tau` signal at all. Each sweep therefore shuffles the
+interval order within a block and repeats a fixed-interval control run every four
+runs. The spread among those controls is the error bar for that sweep, the
+throughput measured during each run is recorded alongside it, and the arms the
+argument rests on are scheduled into the quiet hours.
+
 **Workload.** A generator produces fixed-rate records carrying an emission
 timestamp and a key; the job keys by that field and maintains one `ValueState`
 entry of configurable size per key. State entries are filled with a
@@ -425,7 +453,11 @@ is exactly where the 5.8× gap between the two cost currencies comes from.
 
 **Shared host.** An unrelated MySQL instance holds about one core throughout and
 a Kubernetes control plane is resident. We pin around them and log load average
-with every sample, but they add variance we cannot remove.
+and checkpoint write throughput with every sample, but they add variance we
+cannot remove — and, as §4 reports, that variance is not stationary: checkpoint
+write throughput swings 4x over the day. Shuffled interval order and repeated
+control runs keep that drift out of the fitted curves, but they cannot recover
+the short intervals during the hours when a checkpoint takes 7-9 s.
 
 **`delta` is fitted from four points.** The saturated (`tau` <= 4 s) and unstable
 (`tau` = 128 s) runs are excluded from that regression on stated criteria, and
