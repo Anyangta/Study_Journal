@@ -33,7 +33,7 @@ served. The cost of a failure is therefore an area of accumulated backlog,
 quadratic in the age of the last checkpoint, where the classical cost is linear
 in it. The two objectives are consequently minimised at different intervals with
 different exponents — wasted work at `M^{1/2}` exactly, latency at an exponent
-that falls from 0.43 to 0.34 across the practical range and tends to 1/3.
+that falls from 0.43 to 0.35 across the practical range and tends to 1/3.
 
 We derive both and measure every term of both on a Flink 1.20 / Kafka 3.9
 deployment under injected TaskManager failures. Across 36 failure episodes
@@ -366,14 +366,18 @@ form the data has.
 
 With `delta` = 1.277 s, `D` = 4.11 s, `rho` = 0.50:
 
-| `M` | latency-optimal (measured terms) | latency-optimal (closed form) | wasted-work optimal | classical Young/Daly | ratio |
+| `M` | latency-optimal (measured terms) | latency-optimal (closed form) | wasted-work, `rho`-corrected | classical Young/Daly | Daly / latency-opt |
 |---|---|---|---|---|---|
-| 30 s  | 2.8 s  | 2.7 s  | 5.1 s   | 3.6 s   | 1.8× |
-| 55 s  | 3.6 s  | 3.5 s  | 7.0 s   | 4.9 s   | 1.9× |
-| 150 s | 5.5 s  | 5.3 s  | 11.5 s  | 8.1 s   | 2.1× |
-| 10 min| 9.4 s  | 9.2 s  | 22.9 s  | 16.3 s  | 2.4× |
-| 1 h   | 18.4 s | 18.0 s | 56.2 s  | 39.9 s  | 3.1× |
-| 1 day | 56.6 s | 55.3 s | 275.3 s | 195.3 s | 4.9× |
+| 30 s  | 2.8 s  | 2.7 s  | 5.1 s   | 3.6 s   | 1.3× |
+| 55 s  | 3.6 s  | 3.5 s  | 7.0 s   | 4.9 s   | 1.4× |
+| 150 s | 5.5 s  | 5.3 s  | 11.5 s  | 8.1 s   | 1.5× |
+| 10 min| 9.4 s  | 9.2 s  | 22.9 s  | 16.3 s  | 1.7× |
+| 1 h   | 18.4 s | 18.0 s | 56.2 s  | 39.9 s  | 2.2× |
+| 1 day | 56.6 s | 55.3 s | 275.3 s | 195.3 s | 3.5× |
+
+The last column is against Young/Daly as usually quoted. The `rho`-corrected
+wasted-work optimum is larger still, so quoting the classical form is the
+conservative choice.
 
 The closed form of (1) agrees with the optimum obtained by composing the measured
 steady and episode terms to within 3 % at every `M`. Directly, the seven measured
@@ -476,7 +480,7 @@ SLA feels is the area under the resulting backlog — quadratic in the checkpoin
 age where the batch cost is linear. The optimum accordingly grows strictly more
 slowly than the square root of the mean time between failures — exponent 0.43
 falling to 0.35 over the practical range, 1/3 in the limit — and the two answers
-separate by 3× at an MTBF of an hour and 5× at a day.
+separate by 2.2× at an MTBF of an hour and 3.5× at a day.
 
 Two measurement results matter as much as the exponent. A checkpoint delays 5.8×
 more record-seconds than the capacity it consumes, so a rule calibrated in

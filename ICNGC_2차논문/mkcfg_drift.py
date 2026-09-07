@@ -81,6 +81,25 @@ def main():
                 cfgs.append(make(block, ctrl_tau, len(
                     [c for c in cfgs if "_ctl_" in c["run_id"]]), rng, spec,
                     spec["tag"], suffix="_ctl"))
+    # Shuffling inside a block keeps drift out of one curve, but a sweep whose
+    # blocks run one after the other still measures block A in one part of the
+    # day and block B in another -- and the whole point of those sweeps is to
+    # compare A against B.  With "interleave" the blocks are dealt together, so
+    # the comparison is made under the same conditions even when the sweep spans
+    # a bad stretch of the day.  Control runs keep their relative spacing.
+    if spec.get("interleave"):
+        main = [c for c in cfgs if "_ctl" not in c["run_id"]]
+        ctl = [c for c in cfgs if "_ctl" in c["run_id"]]
+        rng.shuffle(main)
+        every = max(1, len(main) // (len(ctl) + 1)) if ctl else 0
+        out = []
+        for i, c in enumerate(main):
+            out.append(c)
+            if ctl and (i + 1) % every == 0 and ctl:
+                out.append(ctl.pop(0))
+        out.extend(ctl)
+        cfgs = out
+
     json.dump(cfgs, open(out_path, "w"), indent=1)
     tot = sum(c["warmup_s"] + c["measure_s"] + 55 for c in cfgs)
     print(f"{len(cfgs)} runs -> {out_path}   est {tot/3600:.1f} h")
