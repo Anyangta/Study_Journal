@@ -117,7 +117,11 @@ def fit(runs, cks, sels):
         # 22 s maximum, and on its own it flips the sign of the fit.
         if (s.get("n_ckpt") or 0) < MIN_CKPT:
             dropped.append((rid, tau, st, "few_ckpt", thr)); continue
-        pts.append((tau, st / 1000.0, thr, rid))
+        rho_run = m.get("_rho")
+        if rho_run is None:
+            lam = s.get("lambda_meas"); mu = m.get("_mu")
+            rho_run = (lam / mu) if (lam and mu) else 0.5
+        pts.append((tau, st / 1000.0, thr, rid, rho_run))
     print(f"selector {sels}: {len(pts)} usable, {len(dropped)} dropped")
     for rid, tau, st, why, thr in sorted(dropped, key=lambda x: x[1]):
         print("   drop %-40s tau=%6.1f steady=%9.1f  %-9s %5.0f MB/s" % (rid[:40], tau, st, why, thr))
@@ -134,14 +138,15 @@ def fit(runs, cks, sels):
     ss_tot = float(((y - y.mean()) ** 2).sum())
     r2 = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
     slope, icept = float(coef[0]), float(coef[1])
-    rho = 0.5
+    import statistics as _st
+    rho = _st.median([p[4] for p in pts])
     delta = math.sqrt(2 * max(slope, 0.0) * (1 - rho))
     print("   used points (tau, steady_ms, MB/s):")
-    for tau, st, thr, rid in pts:
+    for tau, st, thr, rid, _rho in pts:
         print("      %7.1f %10.1f %7.0f   %s" % (tau, st * 1000, thr, rid[:46]))
     thrs = [p[2] for p in pts if p[2] == p[2]]
-    print("   l0 = %.1f ms   slope = %.4f   R2 = %.4f   delta = %.3f s" %
-          (icept * 1000, slope, r2, delta))
+    print("   l0 = %.1f ms   slope = %.4f   R2 = %.4f   rho = %.2f   delta = %.3f s" %
+          (icept * 1000, slope, r2, rho, delta))
     print("   tau range %.1f - %.1f s  (1/tau spread %.0fx)" %
           (pts[0][0], pts[-1][0], pts[-1][0] / pts[0][0]))
     if thrs:
