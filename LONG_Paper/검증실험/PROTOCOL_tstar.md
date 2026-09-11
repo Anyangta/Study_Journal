@@ -1,4 +1,8 @@
-# tau* held-out 검증 프로토콜 (사전 등록)
+# tau* held-out 검증 프로토콜 (사전 확정 / pre-specified)
+
+> **용어 주의 (2026-09-12 추가)**: 이 문서는 검증 데이터를 수집하기 **전에** 확정한
+> 내부 문서입니다. OSF 등 **외부 registry에 timestamped 등록한 것이 아니므로**
+> 논문에서 "pre-registered"로 쓰지 마세요. **pre-specified** 가 정확한 표현입니다.
 
 작성: 2026-09-11 18:1x KST — **캘리브레이션 결과를 보기 전에 작성됨**
 목적: 모델이 예측하는 latency-optimal checkpoint interval의 "위치"를 독립 검증
