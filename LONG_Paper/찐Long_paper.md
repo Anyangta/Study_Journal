@@ -35,9 +35,9 @@ Dankook University, Yong-in, Republic of Korea
 도출한 결과, 지연 최적 주기는 용량 손실 기준의 √M 계열 기준식보다 느리게 증가하며(국소
 지수 약 0.43–0.35) 장애가 드물수록 두 방식의 차이가 커진다. Apache Flink 1.20.5와
 Kafka 3.9.2 환경의 단일 노드 255회 실험과 2노드 약 22회 실험에서, 각 장애의 입력률·복구 중
-처리율·최대 지연을 그 장애에서 직접 측정해 **적합 파라미터를 하나도 쓰지 않고** backlog
-drain 기하가 함의하는 면적 관계를 검증한 결과 대표 조건에서 R²=0.996을 얻었고 회귀 기울기도
-1.1배 수준이어서 관계의 형태뿐 아니라 크기도 재현되었다. 또한 지연 등가 체크포인트 비용은
+처리율·최대 지연을 그 장애에서 직접 측정해 **데이터 적합 파라미터가 없는** backlog drain
+기하식을 계산하고 실측 지연 면적과 비교하였다. 대표 조건에서 두 값의 선형회귀는 R²=0.996,
+기울기 1.107로 관계의 형태와 크기가 모두 재현되었다. 또한 지연 등가 체크포인트 비용은
 단일 노드 로컬 저장소에서 체크포인트 소요의 0.43–0.61배였으나 2노드 원격 저장소 구성에서는
 0.18–0.23이었다. 두 구성에서 서로 다른 비용 특성이 관찰되었다.
 
@@ -73,8 +73,8 @@ exactly-once 보장에 필수적이다. 그러나 체크포인트는 저장장�
    비용이 체크포인트 경과 시간의 **제곱**에 비례함을 유도한다.
 2. 정상 체크포인트 비용과 replay 비용을 하나의 지연 목적함수로 결합해 최적 주기를 유도하고,
    용량 손실 기준의 √M 스케일링과 다른 스케일링을 보인다.
-3. Flink/Kafka 실험에서 각 항을 독립 측정하고, **적합 파라미터를 쓰지 않은 기하 검증**으로
-   backlog drain 구조가 실측 지연 면적을 설명하는지 확인한다(R²=0.996).
+3. Flink/Kafka 실험에서 각 항을 독립 측정하고, **데이터 적합 파라미터가 없는 기하식**이
+   실측 지연 면적을 설명하는지 회귀로 평가한다(R²=0.996, 기울기 1.107).
 4. 단일 노드 로컬 저장소 구성과 2노드 원격 저장소 구성에서 비용 특성의 차이를 관찰하고,
    두 요인이 함께 변경된 실험의 해석 한계를 함께 제시한다.
 
@@ -108,10 +108,10 @@ record-weighted latency cost를 직접 유도한다. Table I은 목적함수 관
 | 연구 | 목적함수 | 검증 | 본 연구와의 차이 |
 |---|---|---|---|
 | Young[1]/Daly[2] | 낭비 작업/체크포인트 비용 | 이론 | 유한 연산, 복구 중 입력 유입 없음 |
-| Zhuang 등[3] | 처리 효율(OCI 온라인 조정) | 실험(실제 workload) | 복구 workload의 입력 의존성을 지적·모델링 |
+| Zhuang 등[3] | 처리 효율(OCI 온라인 조정) | 시뮬레이션 + 실제 데이터셋 | 복구 workload의 입력 의존성을 지적·모델링 |
 | Jayasekara 등[4,6] | 활용률(utilization) | Flink 실험 | 본 연구는 record-weighted latency 기하 |
 | Zhang 등[5] | tuple latency + 복구 시간 | Flink 실험 | 본 연구는 replay backlog 면적을 직접 유도 |
-| **본 연구** | **record latency 면적** | **Flink/Kafka, 무적합 R²=0.996** | quadratic drain 구조 유도·검증 |
+| **본 연구** | **record latency 면적** | **Flink/Kafka 실험, 적합 파라미터 없는 기하식과 실측의 회귀 R²=0.996** | quadratic drain 구조 유도·검증 |
 
 ## III. Latency-Based Checkpoint Model
 
@@ -231,30 +231,34 @@ censored episode를 구분하였다. τ<2d 기준은 물리적 최소 주기가 
 
 ### C. 실험 결과
 
-**1) backlog drain 기하의 무적합 검증.** 각 장애에서 입력률 λ, 복구 중 처리율 μ_d, 최대
-지연 p를 **그 장애 자체에서** 직접 측정해 `A_geo = μ_d·λ·p²/(2(μ_d−λ))`를 계산하고, 같은
-에피소드의 실측 초과 지연 면적과 비교하였다. 데이터에 적합시킨 파라미터는 하나도 없다.
+**1) 적합 파라미터 없는 기하식과 실측의 비교.** 각 장애에서 입력률 λ, 복구 중 처리율 μ_d,
+최대 지연 p를 **그 장애 자체에서** 직접 측정해 `A_geo = μ_d·λ·p²/(2(μ_d−λ))`를 계산하고,
+같은 에피소드의 실측 초과 지연 면적과 비교하였다. **기하식 자체에는 데이터에 적합시킨
+파라미터가 없다.**
 
-검증 대상을 분명히 해 둔다. p를 해당 에피소드에서 측정해 쓰므로 이는 **미래 장애의 비용을
-맞히는 out-of-sample 예측이 아니라**, III.B에서 유도한 삼각형 backlog drain 기하가 실제
-복구 궤적에 성립하는지를 보는 **구조 검증**이다. 즉 τ\* 모델 전체의 예측력이 아니라, 그
-모델이 딛고 선 기하 관계가 검증 대상이다.
+검증 대상과 통계 처리를 분명히 해 둔다. 첫째, p를 해당 에피소드에서 측정해 쓰므로 이는
+**미래 장애의 비용을 맞히는 out-of-sample 예측이 아니라**, III.B에서 유도한 삼각형 backlog
+drain 기하가 실제 복구 궤적에 성립하는지를 보는 **구조 검증**이다. 둘째, 아래의 결정계수는
+기하식 값을 설명변수로, 실측 면적을 반응변수로 하는 **선형회귀(기울기·절편 적합)의 R²**
+이며, 기하식 자체만으로 얻은 설명력이 아니다. 즉 **적합 파라미터가 없는 모델을 회귀로
+평가한 것**이다.
 
-100k key·ρ=0.50 조건 30개 에피소드에서 결정계수는 **R²=0.996**, 200k key·ρ≈0.30 조건
-61개 에피소드에서 **R²=0.982**였다. 결정계수는 관계의 *형태*가 맞는지만 말해주므로 크기는
-회귀 기울기로 확인하였고, 두 조건의 기울기는 기하식 값의 각각 **1.11배·1.09배**였다.
+100k key·ρ=0.50 조건 30개 에피소드에서 이 회귀의 결정계수는 **R²=0.996**, 회귀 기울기는
+**1.107**이었다. 200k key·ρ≈0.30 조건 61개 에피소드에서는 **R²=0.982**, 기울기 **1.092**
+였다. 결정계수는 관계의 *형태*가 맞는지를, 기울기는 *크기*가 맞는지를 말해준다.
 
 Figure 3은 세 상태 크기(100k·200k·400k key)의 사용 가능한 에피소드를 모두 모은 것으로,
 위 두 조건보다 넓은 모집단이다. 이 전체 집합에서 실측은 기하식 값의 **약 1.2배**에
 정렬되며, 그 관계는 네 자릿수(10⁰–10⁴ M record·s) 범위에 걸쳐 유지된다. 즉 기하식은
 비용의 구조를 재현하되 **크기를 10–20% 낮게 보는 계통 편차**를 가진다.
 
-적합 파라미터가 없으므로 과적합에 의한 설명력 부풀림은 배제되지만, episode 제외 기준,
-μ_d 측정 방식, 최대 지연의 정의와 같은 분석 선택은 여전히 존재한다.
+기하식 자체에는 데이터 적합 파라미터가 없으므로 모델 파라미터 fitting에 따른 과적합
+가능성은 제한된다. 다만 episode 제외 기준, μ_d 측정 방식, 최대 지연의 정의와 같은 분석
+선택의 영향은 존재한다.
 
 ![Figure 3](figs/fig3_area_validation.png)
 
-**Figure 3.** backlog drain 기하의 무적합 검증. 각 장애에서 측정한 λ, μ_d, 최대 지연만으로
+**Figure 3.** 적합 파라미터 없는 기하식과 실측 지연 면적의 비교. 각 장애에서 측정한 λ, μ_d, 최대 지연만으로
 계산한 기하식 값(x)과 같은 에피소드의 실측 초과 지연 면적(y). 적합 파라미터는 없다. 세 상태
 크기의 에피소드를 모두 포함하며, 실선은 실측 대 기하식의 중앙 비(×1.21), 점선은 y=x이다.
 여러 에피소드에 걸쳐 quadratic backlog drain 관계가 네 자릿수 범위에서 유지된다.
@@ -336,8 +340,8 @@ latency 관점으로 분석하였다. 장애 후 replay 시 새 입력이 계속
 용량 μ_d−λ로만 감소하며, 이로부터 장애 비용이 (a+D)²에 비례함을 유도하였다. 이를 정상
 체크포인트 비용과 결합하면 용량 손실 기준(√M)과 다른 최적 주기가 도출되며, 일정 조건에서
 지연 최적 주기는 √M보다 느리게(국소 0.43–0.35) 증가한다. Flink/Kafka 실험에서 개별 장애
-측정값만으로 적합 파라미터 없이 계산한 backlog drain 기하가 실측 지연 면적을 대표 조건에서
-R²=0.996으로 설명하였고, 체크포인트의 지연 등가 비용이 단순 용량 손실보다 크다는 점을
+측정값만으로 계산한(적합 파라미터 없는) backlog drain 기하식이 실측 지연 면적과 대표
+조건에서 R²=0.996·기울기 1.107의 선형 관계를 보였고, 체크포인트의 지연 등가 비용이 단순 용량 손실보다 크다는 점을
 확인하였다. 단일 노드 로컬 저장소 구성과 2노드 원격 저장소 구성에서는 서로 다른 비용
 특성이 관찰되었으나, 두 구성은 토폴로지와 저장소 backend가 함께 바뀌었으므로 어느 한
 요인의 인과로 귀속하지 않는다. 향후 로컬/원격 저장소를 독립 변경하는 실험, 더 많은 노드, 실제 workload, 다양한
@@ -355,11 +359,14 @@ R²=0.996으로 설명하였고, 체크포인트의 지연 등가 비용이 단�
 [2] J. T. Daly, "A higher order estimate of the optimum checkpoint interval for restart
 dumps," *Future Generation Computer Systems*, vol. 22, no. 3, pp. 303–312, 2006.
 [3] Y. Zhuang et al., "An optimal checkpointing model with online OCI adjustment for
-stream processing applications," in *Proc. ICCCN*, 2018.
+stream processing applications," in *Proc. ICCCN*, 2018, pp. 1–9,
+doi: 10.1109/ICCCN.2018.8487327.
 [4] S. Jayasekara et al., "A utilization model for optimization of checkpoint intervals
-in distributed stream processing systems," *Future Generation Computer Systems*, 2020.
+in distributed stream processing systems," *Future Generation Computer Systems*,
+vol. 110, pp. 68–79, 2020.
 [5] Z. Zhang et al., "Research on optimal checkpointing-interval for Flink stream
-processing applications," *Mobile Networks and Applications*, 2021.
+processing applications," *Mobile Networks and Applications*, vol. 26, no. 5,
+pp. 1950–1959, 2021.
 [6] S. Jayasekara et al., "Optimizing checkpoint-based fault-tolerance in distributed
 stream processing systems: theory to practice," *Software: Practice and Experience*, 2022.
 [7] P. Carbone et al., "Lightweight asynchronous snapshots for distributed dataflows,"
@@ -379,7 +386,7 @@ arXiv:1506.08603, 2015.
 - **그림 4장** (3차 감사에서 5장 → 4장으로 줄임):
   - Figure 1 `fig_arch` — 아키텍처. 시스템 설명.
   - Figure 2 `fig0_trace` — 단일 장애 recovery trajectory. 왜 quadratic인지 보여줌.
-  - Figure 3 `fig3_area_validation` — 무적합 기하 검증 R²=0.996 ★ 핵심.
+  - Figure 3 `fig3_area_validation` — 적합 파라미터 없는 기하식 vs 실측, 회귀 R²=0.996 ★ 핵심.
   - Figure 4 `fig2_scaling` — τ\* vs M 로그–로그 선 그래프. 최종 결론.
   - **뺀 것**: `fig_bar_delta`(옛 Figure 4)는 Table III와 같은 네 조건의 같은 수치를
     반복하는데 Table III에는 R²까지 있어 정보량이 더 많음 → Table III만 남김.
@@ -398,7 +405,7 @@ arXiv:1506.08603, 2015.
   기울기/예측 1.107·1.092, 전체 중앙배율 1.21; δ/d 0.43–0.61(1노드)·0.18–0.23(2노드);
   2노드 복원 2.39s(12 ep 중앙값), 2노드 약 22 run; 분석 사용 비율 약 34%;
   M_eff 72.8s; 배율 1.4/1.4/1.9/2.4/3.8 (원값 1.361/1.432/1.851/2.350/3.793).
-- **3차 감사에서 고친 것(2026-09-11)**: ①Figure 3을 "예측"이 아니라 **무적합 기하 검증**으로
+- **3차 감사에서 고친 것(2026-09-11)**: ①Figure 3을 "예측"이 아니라 **적합 파라미터 없는 기하 검증**으로
   재규정 — p를 같은 에피소드에서 재므로 out-of-sample 예측이 아니며, 검증 대상은 삼각형
   backlog drain 구조임을 본문에 명시 ②Table I의 Zhuang·Zhang 검증란 수정(Zhuang "—"→실험,
   Zhang은 tuple latency+복구시간 결합·Flink 검증으로 인정) ③Figure 2 캡션에서 "면적이
