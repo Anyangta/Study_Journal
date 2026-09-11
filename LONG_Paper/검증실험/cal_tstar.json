@@ -1,0 +1,138 @@
+[
+ {
+  "run_id": "cal_nf_c4",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 4000,
+  "warmup_s": 90,
+  "measure_s": 300,
+  "failures": [],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_nf_c6",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 6000,
+  "warmup_s": 90,
+  "measure_s": 300,
+  "failures": [],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_nf_c9",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 9000,
+  "warmup_s": 90,
+  "measure_s": 300,
+  "failures": [],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_nf_c14",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 14000,
+  "warmup_s": 90,
+  "measure_s": 300,
+  "failures": [],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_nf_c20",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 20000,
+  "warmup_s": 90,
+  "measure_s": 300,
+  "failures": [],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_nf_c30",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 30000,
+  "warmup_s": 90,
+  "measure_s": 300,
+  "failures": [],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_f_c8_0",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 8000,
+  "warmup_s": 90,
+  "measure_s": 600,
+  "failures": [
+   151.0,
+   291.6,
+   433.4
+  ],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_f_c8_1",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 8000,
+  "warmup_s": 90,
+  "measure_s": 600,
+  "failures": [
+   143.5,
+   300.8,
+   435.3
+  ],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_f_c14_2",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 14000,
+  "warmup_s": 90,
+  "measure_s": 600,
+  "failures": [
+   128.5,
+   248.7,
+   447.1
+  ],
+  "parts": 8
+ },
+ {
+  "run_id": "cal_f_c14_3",
+  "rate": 58277,
+  "keys": 100000,
+  "payload": 1024,
+  "spin": 32000,
+  "ckpt_ms": 14000,
+  "warmup_s": 90,
+  "measure_s": 600,
+  "failures": [
+   142.2,
+   303.6,
+   437.5
+  ],
+  "parts": 8
+ }
+]
