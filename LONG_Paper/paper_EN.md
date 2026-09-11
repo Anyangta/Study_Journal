@@ -67,8 +67,8 @@ more data to recover. Interval selection is therefore a trade-off between a stea
 cost and a recovery cost. The classical analyses of Young [1] and Daly [2] treat this
 balance, and later work has addressed distributed stream settings [3], [4], [5].
 
-This paper does not claim to be the first to study stream checkpoint intervals, nor that
-prior work ignored latency. Our focus is on **the objective function by which the
+This paper claims neither that it is the first to study stream checkpoint intervals nor
+that prior work ignored latency. Our focus is on **the objective function by which the
 interval is chosen**. Unlike the utilization and processing-efficiency objectives that
 prior work has mainly considered, what matters in a latency-sensitive application is how
 long each record caught by a failure is delayed. In particular, when the input is a
@@ -290,8 +290,7 @@ is therefore **a model with no fitted parameters, evaluated by regression**.
 
 Over 30 episodes in the 100k-key, ρ = 0.50 condition this regression gives **R² = 0.996**
 with a slope of **1.107**. Over 61 episodes in the 200k-key, ρ ≈ 0.30 condition it gives
-**R² = 0.982** with a slope of **1.092**. The coefficient of determination speaks to
-whether the *form* of the relation is right, and the slope to whether its *magnitude* is.
+**R² = 0.982** with a slope of **1.092**. R² quantifies the strength of the linear association, while the slope indicates agreement in scale.
 
 Figure 3 pools all **218** usable episodes across three state sizes (100k: 31, 200k: 168,
 400k: 19), a broader population than the two conditions above. Over this full set the
@@ -317,9 +316,9 @@ quadratic backlog-drain relation holds across four decades of episodes.
 **2) The two costs of a checkpoint, and δ.** The cost computed from the processing
 capacity lost during a checkpoint was about 0.15–0.22 s, whereas the latency-equivalent
 cost δ estimated from the steady-state latency curve was about 1.37–4.16 s — a factor of
-8.8–18.6 depending on the condition. This is because a checkpoint need not stop all
-computation in order to increase the delay of many records through barriers, state
-snapshots and momentary stalls. Table III summarizes the checkpoint duration d and the
+8.8–18.6 depending on the condition. This difference is consistent with the fact that a
+checkpoint need not stop all computation in order to increase the delay of many records
+through barriers, state snapshots and momentary stalls. Table III summarizes the checkpoint duration d and the
 latency cost δ for four conditions; δ/d lies in the range 0.43–0.61. With local storage
 there is thus some room to use δ ≈ d/2 as an initial estimate, but this is not a general
 law: in the two-node remote-storage configuration δ/d is 0.18–0.23 (Table V). As noted
@@ -350,9 +349,8 @@ merely in value but in **rate of growth**. The capacity/wasted-work baseline fol
 `τ* ∝ √M` with an exponent of exactly 0.50, whereas the local exponent of the latency
 model is about 0.43 at M = 55 s and about 0.35 at M = 1 day, approaching 1/3
 asymptotically. As a result the ratio of the two intervals widens from 1.4× at M = 30 s
-to 2.4× at one hour and 3.8× at one day. The rarer failures are, therefore, the more
-excessively long the interval chosen by a capacity/wasted-work criterion becomes for a
-latency-sensitive application.
+to 2.4× at one hour and 3.8× at one day. The gap between the two predicted
+intervals therefore widens as failures become rarer.
 
 **Measurable range of the predicted τ\*.** The comparison above is between models, so
 whether the predicted τ\* agrees with the measured optimal interval must be checked
@@ -409,8 +407,8 @@ failure.
 
 **4) Storage performance change and stability.** Over 31 hours of continuous experiments
 the checkpoint write throughput fell from about 288 MB/s to 63 MB/s, so that the
-checkpoint duration for the same state grew from 2–3 s to 8–10 s (`iostat` %util 90.6%;
-SLC cache exhaustion is the presumed cause). Because such degradation would contaminate
+checkpoint duration for the same state grew from 2–3 s to 8–10 s (`iostat` %util 90.6%).
+SLC cache exhaustion was considered a possible cause but was not independently verified. Because such degradation would contaminate
 the regression if it correlated with the order in which intervals were run, we randomized
 the interval order and interleaved fixed-interval control runs. In some conditions, in
 addition, longer τ meant that the failure backlog was not cleared before the next failure
@@ -466,9 +464,10 @@ validation runs, and fix the decision criteria before any data were collected.
 **Ten calibration runs, however, showed that the parameters required for the validation
 could not be obtained in this configuration, and the validation sweep was not executed.**
 The checkpoint duration in the two-node remote-storage configuration measured 4.13 s,
-placing the analysis threshold at 8.26 s, which exceeded the optimum predicted by the
-calibration. The calibration data did not allow δ and D to be estimated reliably (four
-points remaining in the 1/τ regression, R² = 0.04; two usable failure episodes). **This
+placing the empirical analysis threshold at 8.26 s. The preliminary calibration placed the
+candidate optimum below that threshold, while the parameter estimates were too unstable for
+independent validation (four points remaining in the 1/τ regression, R² = 0.04; two usable
+failure episodes). **This
 judgment was made before any validation data were collected**, and independent validation
 of τ\* remains future work. Carrying it out requires first securing a configuration in
 which the predicted optimum lies above the empirically usable region — a short checkpoint
@@ -502,9 +501,9 @@ the calibration stage showed the predicted optimum of that configuration to lie 
 measurable interval range (IV.D). In future work we plan to select a configuration in
 which the predicted optimum lies above the usable region and carry out this validation,
 and to test generality through experiments that vary local and remote storage
-independently, with more nodes, real workloads and a wider range of failure types. The
-raw data of this study (255 runs, more than 13,000 checkpoints) and the analysis scripts
-have been retained for reproducibility.
+independently, with more nodes, real workloads and a wider range of failure types. The raw data
+from the 255-run single-node campaign (more than 13,000 checkpoints) and the analysis
+scripts have been retained for reproducibility.
 
 ## Acknowledgment
 
