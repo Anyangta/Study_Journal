@@ -37,12 +37,10 @@ capacity-loss (wasted-work) baseline — the local exponent falls from about 0.4
 backlog-drain geometry itself, we measured, for each injected failure, the input rate,
 the processing rate during recovery, and the peak latency **on that same failure**, and
 compared the resulting **parameter-free** geometric estimate against the measured excess
-latency area, over 255 single-node runs and about 22 two-node runs on Apache Flink
-1.20.5 with Kafka 3.9.2. Because the peak latency is taken from the same episode, this
+latency area, using data collected from experimental campaigns comprising 255 single-node runs and about 22 two-node runs on Apache Flink 1.20.5 with Kafka 3.9.2. Because the peak latency is taken from the same episode, this
 is a **structural validation** of the drain geometry rather than out-of-sample
 prediction. In the reference condition a linear regression of the measured area on the
-geometric estimate gives R² = 0.996 with a slope of 1.107, so both the form and the
-magnitude of the relation are reproduced. The latency-equivalent checkpoint cost was
+geometric estimate gives R² = 0.996 with a slope of 1.107, showing a strong linear association and close agreement in scale. The latency-equivalent checkpoint cost was
 0.43–0.61 times the checkpoint duration with single-node local storage, and 0.18–0.23
 in the two-node remote-storage configuration; the two configurations exhibited different
 cost characteristics.
@@ -77,7 +75,7 @@ position recorded in the last checkpoint and the records are processed again. Si
 live input continues to arrive at the same time, the replay backlog drains only at the
 residual capacity rather than at the full processing capacity.
 
-The contributions of this paper are as follows.
+This paper makes three contributions.
 
 1. We model the backlog-drain process under durable replay as a record-weighted latency
    area and derive that the failure cost is proportional to the **square** of the age of
