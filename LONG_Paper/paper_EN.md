@@ -1,10 +1,30 @@
-<!-- 영문 제출본 — 제출본.md(한글)의 번역. 2026-09-12.
-     번역 원칙: 수치·구조·주장 강도를 원문과 동일하게 유지. 새 주장 추가 없음.
-     용어 고정: pre-specified(사전 확정) / structural validation(구조 검증) /
-     capacity(wasted-work) baseline(용량·낭비 기준) / effective outage(실효 공백) /
-     latency-equivalent checkpoint cost(지연 등가 체크포인트 비용) /
-     empirical analysis threshold(경험적 분석 임계값).
-     ※ 최종 문장은 저자가 직접 검토·수정하십시오. 제출 전 이 주석 삭제. -->
+<!-- =====================================================================
+     영문 제출본 v2 — 2026-09-13
+     =====================================================================
+     v1(paper_EN_v1.md) 대비 변경:
+     (1) 외부 검토본의 구조를 채택 (Table V 제거, 수식 번호 (1)~(10),
+         IV.A~E 재구성, 초록 압축).
+     (2) v1에서 규명해 넣었던 세 가지를 복원 — 빠지면 심사에서 걸립니다:
+         (a) Table III↔IV의 d가 서로 다른 subset에서 나왔다는 공개 +
+             100 MB fast에서 δ와 임계값이 다른 저장소 상태에서 측정됐다는 한계
+         (b) 2노드 δ/d = 0.18–0.23 ("d/2는 일반 법칙이 아니다"의 유일한 근거)
+         (c) Table IV의 측정점 개수 (4/4/10)
+     (3) Figure 4의 ρ_d를 역산값 0.5563 → 측정값 0.5134로 교체하고 재생성.
+         δ_cap = 0.22 s를 캡션에 명시.
+     (4) 국소 지수를 0.43/0.35 → 0.41/0.36/0.34로 정정. 논문의 기준
+         파라미터에서 재현되는 값이며, 격차 비율도 1.4/2.4/3.8 → 1.3/2.3/3.7
+         (보수적 방향).
+
+     ── 표·그림을 어디에 넣는가 (각 float 바로 앞 주석에 개별 지시) ──
+     공통 규칙:
+       · IEEE 2단: 표 캡션은 **위**, 그림 캡션은 **아래**.
+       · 모든 float은 **본문에서 처음 인용된 뒤**에 와야 합니다. 앞서면 안 됩니다.
+       · LaTeX은 [t] (단 상단)을 기본으로. 1단 폭이면 table/figure,
+         2단 전체 폭이 필요하면 table*/figure*.
+       · Table I·II·IV는 열이 많아 2단 폭(table*)이 읽기 편합니다.
+       · Figure 1~4는 1단 폭(3.4 in)으로 충분합니다. PDF로 넣으세요(figs/*.pdf).
+     ※ 최종 문장은 저자가 직접 검토·수정하십시오. 제출 전 이 주석 블록 삭제.
+     ===================================================================== -->
 
 # Checkpoint Interval Optimization for Latency-Sensitive Distributed Stream Processing
 
@@ -19,518 +39,511 @@ Dankook University, Yong-in, Republic of Korea
 
 ## Abstract
 
-*Abstract*— Stateful distributed stream processing systems such as Apache Flink take
-periodic checkpoints in order to recover from failures. A short interval raises the
-overhead imposed on normal processing, while a long interval increases the amount of
-reprocessing after a failure and therefore the latency. Existing work on stream
-checkpoint intervals has largely selected the interval on the basis of system
-utilization or processing efficiency. Latency-sensitive applications, however, call for
-an objective that directly minimizes the delay individual records actually experience.
-This paper focuses on the replay backlog that arises after a failure when the source is
-a durable log such as Kafka. Because live input keeps arriving during recovery, the
-backlog drains not at the full processing capacity but only at the residual capacity
-(μ_d − λ); from this we derive that the failure cost grows with the **square** of the
-age of the last checkpoint. Combining this with the steady-state checkpoint cost yields
-a latency-optimal interval that grows more slowly than the √M family obtained from a
-capacity-loss (wasted-work) baseline — the local exponent falls from about 0.43 to 0.35
-— so the two criteria diverge further as failures become rarer. To validate the proposed
-backlog-drain geometry itself, we measured, for each injected failure, the input rate,
-the processing rate during recovery, and the peak latency **on that same failure**, and
-compared the resulting **parameter-free** geometric estimate against the measured excess
-latency area, using data collected from experimental campaigns comprising 255 single-node runs and about 22 two-node runs on Apache Flink 1.20.5 with Kafka 3.9.2. Because the peak latency is taken from the same episode, this
-is a **structural validation** of the drain geometry rather than out-of-sample
-prediction. In the reference condition a linear regression of the measured area on the
-geometric estimate gives R² = 0.996 with a slope of 1.107, showing a strong linear association and close agreement in scale. The latency-equivalent checkpoint cost was
-0.43–0.61 times the checkpoint duration with single-node local storage, and 0.18–0.23
-in the two-node remote-storage configuration; the two configurations exhibited different
-cost characteristics.
+*Abstract*— Stateful distributed stream processing systems checkpoint their state
+periodically to enable fault recovery, which imposes an intrinsic trade-off between
+checkpointing overhead and recovery latency. This paper formulates checkpoint-interval
+selection directly in terms of **record-weighted latency** under durable replay. When a
+failure occurs, live input continues to arrive while previously processed records are
+replayed; the resulting **replay backlog** therefore drains only at the **residual service
+capacity** (μ_d − λ) rather than at the nominal processing rate. Under a linear
+backlog-drain approximation, this mechanism yields a recovery cost that grows
+**quadratically** with checkpoint age. Combining this quadratic failure term with the
+steady-state checkpointing cost produces a latency-optimal interval whose dependence on the
+mean failure interval M approaches M^(1/3), in contrast to the √M scaling exhibited by a
+**capacity/wasted-work baseline**. We assess the underlying **backlog-drain geometry** on
+Apache Flink and Kafka. A geometric estimate derived exclusively from same-episode
+measurements contains **no data-fitted model parameters** and exhibits a strong linear
+association with the measured excess-latency area: R² = 0.996 with a slope of 1.107 in the
+reference condition, and R² = 0.982 with a slope of 1.092 in a second condition. These
+results constitute a **structural validation** of the proposed backlog-drain model;
+independent validation of the predicted global optimum remains future work.
 
-*Keywords*— Apache Flink, Apache Kafka, Checkpoint, Fault Recovery, Stream Processing,
-Latency Optimization
+*Keywords*— Checkpoint Interval Optimization, Record-Weighted Latency, Replay Backlog,
+Distributed Stream Processing, Fault Recovery, Apache Flink
 
 ---
 
-## I. Introduction
+## I. INTRODUCTION
 
-Real-time log analytics, financial transaction processing and IoT monitoring all require
-continuously arriving data to be processed at low latency. Stateful distributed stream
-processing systems such as Apache Flink store operator state and input progress in
-checkpoints so that a consistent state can be restored after a failure, which is
-essential for exactly-once guarantees. Checkpoints, however, consume storage and CPU
-resources, so the interval at which they are taken has to be chosen.
+Stateful distributed stream processors underpin latency-sensitive workloads such as
+real-time analytics, financial transaction processing, and IoT monitoring. Frameworks such
+as Apache Flink persist operator state and source progress periodically so that execution
+can resume from a consistent state after a failure. Although checkpointing is indispensable
+for fault tolerance and exactly-once semantics, it consumes CPU, storage, and I/O resources
+and can transiently inflate record latency. The checkpoint interval therefore governs a
+fundamental trade-off between normal-operation overhead and recovery cost.
 
-A short checkpoint interval τ shortens the span that must be replayed after a failure
-but degrades normal processing; a long τ reduces the steady-state overhead but leaves
-more data to recover. Interval selection is therefore a trade-off between a steady-state
-cost and a recovery cost. The classical analyses of Young [1] and Daly [2] treat this
-balance, and later work has addressed distributed stream settings [3], [4], [5].
+A short interval curtails the state and source progress that must be replayed after a
+failure, but raises checkpoint frequency and steady-state interference. A long interval
+attenuates checkpointing overhead, yet inflates the checkpoint age at failure and hence the
+volume of replayed data. Classical checkpoint/restart models, notably those of Young [1] and
+Daly [2], resolve this trade-off predominantly through wasted computation or utilization.
+Stream-specific studies have since incorporated workload intensity, processing efficiency,
+recovery time, and tuple latency [3]–[6].
 
-This paper claims neither that it is the first to study stream checkpoint intervals nor
-that prior work ignored latency. Our focus is on **the objective function by which the
-interval is chosen**. Unlike the utilization and processing-efficiency objectives that
-prior work has mainly considered, what matters in a latency-sensitive application is how
-long each record caught by a failure is delayed. In particular, when the input is a
-durable log such as Kafka, data is not lost on failure: the source is rewound to the
-position recorded in the last checkpoint and the records are processed again. Since new
-live input continues to arrive at the same time, the replay backlog drains only at the
-residual capacity rather than at the full processing capacity.
+The distinction drawn in this work is not that classical systems restart whereas stream
+processors replay; both may roll back to a prior checkpoint. Rather, a durable streaming
+source induces a specific recovery dynamic: **new records continue to arrive while the
+replay backlog is being drained.** If the recovery processing rate is μ_d and the live
+arrival rate is λ, the backlog recedes not at μ_d but at the residual service capacity
+μ_d − λ. This continuous-arrival effect reshapes the recovery-cost geometry experienced by
+individual records.
 
-This paper makes three contributions.
+We therefore formulate checkpoint optimization directly from record-weighted excess latency.
+The resulting model establishes that the failure cost grows quadratically with checkpoint
+age, because a longer replay span simultaneously enlarges the initial backlog and protracts
+the interval over which that backlog delays subsequent records. Combined with the
+latency-equivalent cost of steady-state checkpointing, the resulting optimum exhibits an
+asymptotic scaling distinct from the conventional capacity/wasted-work criterion.
 
-1. We model the backlog-drain process under durable replay as a record-weighted latency
-   area and derive that the failure cost is proportional to the **square** of the age of
-   the last checkpoint.
-2. We combine the steady-state checkpoint cost and the replay cost into a single latency
-   objective, derive the optimal interval, and show that it scales differently from the
-   √M scaling of a capacity-loss baseline.
-3. We measure each term independently in Flink/Kafka experiments and evaluate by
-   regression whether a **geometric expression containing no data-fitted parameters**
-   accounts for the measured latency area (R² = 0.996, slope 1.107).
+This paper makes three contributions. **First**, it derives a record-weighted latency model
+for durable replay and establishes that the failure penalty is quadratic in checkpoint age.
+**Second**, it combines this penalty with steady-state checkpoint interference to obtain a
+latency-optimal interval together with its asymptotic scaling. **Third**, it assesses the
+proposed backlog-drain geometry on Apache Flink/Kafka using same-episode measurements,
+thereby separating structural validation of the recovery mechanism from out-of-sample
+validation of the global optimum.
 
-## II. Related Work
+## II. RELATED WORK
 
 ### A. Classical Checkpoint-Interval Models
 
-Young [1] approximated the optimal interval by balancing the cost of recomputation
-against the cost of checkpointing, and Daly [2] extended this to a higher order. These
-models also roll back to the last checkpoint and re-execute after a failure.
-Distinguishing the classical setting from the streaming one as "batch only saves state
-while only streams rewind" is therefore inaccurate. The more fundamental difference is
-that a stream is an unbounded computation that does not terminate, and that **new data
-keeps arriving while recovery is in progress**.
+Young [1] derived a first-order approximation of the optimal checkpoint interval by
+balancing checkpointing overhead against the expected recomputation incurred after a
+failure. Daly [2] subsequently supplied a higher-order formulation. Together these
+established the classical view of checkpoint selection as a trade-off between checkpoint
+cost and lost work.
 
-### B. Checkpoint Optimization for Stream Processing
+Distributed snapshot mechanisms address a related but distinct problem: capturing a globally
+consistent state. Chandy and Lamport [8] introduced the foundational distributed snapshot
+algorithm, which later stream-processing systems adapted to continuously executing
+dataflows. Carbone et al. [7] proposed asynchronous barrier snapshotting for distributed
+dataflows and subsequently documented Flink's state-management and recovery architecture in
+detail [10].
 
-Zhuang et al. [3] observed that traditional OCI models treat recovery time as merely the
-execution time elapsed since the last checkpoint, which does not fit stream processing,
-and that recovery depends on the live input and the reprocessing workload. Jayasekara et
-al. [4] modeled the interval that maximizes the utilization of a distributed stream and
-validated it on Flink, and evaluated latency and throughput effects in later work [6].
-Zhang et al. [5] estimated tuple latency and recovery time as a function of workload
-intensity on Flink and analyzed the resulting optimal interval. Consistent snapshots in
-distributed systems originate in the marker-based algorithm of Chandy and Lamport [8];
-in stream processing, Sebepou and Magoutis [9] proposed incremental operator-state
-checkpointing overlapped with processing. Carbone et al. [7] proposed the asynchronous
-barrier snapshotting that underlies Flink checkpoints, and later described Flink's state
-management and recovery architecture in detail [10].
+### B. Checkpoint Optimization in Stream Processing
 
-This work builds on these but differs in that it explicitly derives the geometry by
-which a replay backlog drains in the presence of continuous arrivals, and constructs
-record-weighted latency directly as the objective from that geometry. That is, whereas
-prior work optimizes utilization or processing efficiency, or models workload-dependent
-tuple latency, we derive the record-weighted latency cost directly from the
-backlog-drain geometry. Table I summarizes the difference in objective.
+Stream-specific work has extended conventional checkpoint models to account for continuous
+processing. Zhuang et al. [3] modeled an online checkpoint-interval adjustment mechanism in
+which recovery cost is contingent on the stream-processing workload. Jayasekara et al. [4]
+derived a utilization-based checkpoint model for distributed stream processors and validated
+it on Apache Flink; subsequent work examined checkpoint-induced latency and throughput
+effects [6]. Zhang et al. [5] modeled workload-dependent tuple latency and recovery
+behaviour for Flink applications. Sebepou and Magoutis [9] studied checkpointing techniques
+that overlap state persistence with ongoing stream processing.
 
-**TABLE I. COMPARISON OF OBJECTIVES IN RELATED WORK AND THIS WORK**
+Our focus is complementary. Rather than casting the checkpoint objective primarily as
+utilization, processing efficiency, or workload-dependent recovery time, we derive the
+failure term directly from the **backlog-drain geometry experienced by records**. The
+governing quantity is thus the accumulated record-weighted latency attributable to durable
+replay under continuous arrivals.
 
-| Work | Objective | Validation | Difference from this work |
+<!-- ▣ TABLE I 배치: 여기(II.B 끝, 첫 인용 직후). 열이 4개라 2단 폭(table*) 권장.
+     캡션은 표 위. -->
+
+**TABLE I. COMPARISON WITH RELATED CHECKPOINT-INTERVAL MODELS**
+
+| Work | Primary Objective | Validation | Distinction |
 |---|---|---|---|
-| Young [1] / Daly [2] | Wasted work / checkpoint cost | Analytical | Bounded computation; no input arriving during recovery |
-| Zhuang et al. [3] | Processing efficiency (online OCI adjustment) | Simulation + real datasets | Identifies and models the input dependence of the recovery workload |
-| Jayasekara et al. [4], [6] | Utilization | Flink experiments | This work uses record-weighted latency geometry |
-| Zhang et al. [5] | Tuple latency + recovery time | Flink experiments | This work derives the replay-backlog area directly |
-| **This work** | **Record latency area** | **Flink/Kafka experiments. Parameter-free geometric estimate; linear association with the measured area, R² = 0.996** | Derives and validates the quadratic drain structure |
+| Young [1], Daly [2] | Wasted work / checkpoint cost | Analytical | Classical checkpoint/restart |
+| Zhuang et al. [3] | Processing efficiency | Simulation + datasets | Workload-dependent recovery |
+| Jayasekara et al. [4], [6] | Utilization | Flink experiments | System-efficiency objective |
+| Zhang et al. [5] | Tuple latency + recovery | Flink experiments | Workload-dependent latency |
+| **This work** | **Record-weighted latency** | **Flink/Kafka experiments** | **Explicit quadratic backlog-drain cost** |
 
-## III. Latency-Based Checkpoint Model
+## III. LATENCY-BASED CHECKPOINT MODEL
 
-### A. System Model and Architecture
+### A. System Model
 
-Figure 1 shows the structure of the experimental system. Input is supplied from Kafka, a
-durable log; on failure the consumption offset is rewound to the position of the last
-checkpoint and the data is replayed. Flink consists of a JobManager and TaskManagers,
-and operator state is held in the RocksDB state backend. Checkpoints are written to the
-local filesystem in the single-node configuration and to MinIO (S3-compatible) remote
-storage on the second node in the two-node configuration.
+Figure 1 depicts the system model. Kafka furnishes a durable input log, and Flink records
+operator state and source offsets periodically. Following a failure, execution resumes from
+the most recently completed checkpoint and records beyond that point are replayed.
+
+<!-- ▣ FIGURE 1 배치: 여기(III.A, 첫 인용 직후). 1단 폭 3.4 in, [t] 상단 고정.
+     figs/fig_arch.pdf 사용. 캡션은 그림 아래. -->
 
 ![Figure 1](figs/fig_arch.png)
 
-**Figure 1.** System architecture: a durable Kafka source, a two-node Flink cluster, and
-local/remote checkpoint storage. On failure the source is rewound to the last checkpoint
-offset, producing a replay backlog.
+**Fig. 1.** Experimental and recovery architecture comprising a durable Kafka source, Flink
+stateful processing, and local or remote checkpoint storage.
 
-We use the following notation: λ (input rate), μ (maximum processing rate), ρ = λ/μ
-(utilization), τ (checkpoint interval), a (age of the last checkpoint at the time of
-failure), D (effective outage), μ_d (processing rate during recovery), M (mean interval
-between failures), and δ (latency-equivalent checkpoint cost). If the last checkpoint is
-of age a and the processing gap is D, the amount to be reprocessed immediately after
-recovery is approximately `B₀ = λ(a + D)`. Because new data continues to arrive at rate
-λ after recovery, the backlog shrinks not at the full processing rate but at `μ_d − λ`,
-so the time to clear it is `T_c = λ(a + D)/(μ_d − λ)`.
+Let λ denote the input rate, μ the nominal maximum processing rate, and ρ = λ/μ the
+utilization. Let τ denote the checkpoint interval and a the age of the most recently
+completed checkpoint when a failure occurs. D denotes the **effective outage**, which
+captures the observable recovery gap employed by the model rather than pure engine downtime.
+During catch-up the processing rate is μ_d, and M denotes the mean failure interval.
 
-### B. Record Latency Cost of a Failure
-
-Immediately after recovery the oldest record has experienced a delay of about (a + D);
-as the backlog decreases linearly the delay also decreases linearly, so the
-delay–time region is a **triangle** (Figure 2). Records are served at μ_d during this
-period, so the sum of the excess delay is
+At recovery, the volume of data requiring replay is approximated by
 
 ```
-A = μ_d · ½(a + D) · T_c = μ_d·λ·(a + D)² / (2(μ_d − λ))
+B₀ = λ(a + D)                                                              (1)
 ```
 
-The essential point is that the failure cost grows not linearly but with the **square**
-of (a + D). The older the checkpoint, the more data must be reprocessed and, at the same
-time, the longer it takes to clear that backlog.
+Because live records continue to arrive at rate λ, backlog reduction proceeds solely through
+the residual service capacity μ_d − λ. Provided μ_d > λ, the catch-up time is
+
+```
+T_c = λ(a + D) / (μ_d − λ)                                                 (2)
+```
+
+This residual-capacity effect is the central mechanism of the proposed model.
+
+### B. Record-Weighted Recovery Cost
+
+Immediately after recovery, the oldest affected records exhibit approximately a + D seconds
+of excess latency. Under an approximately linear backlog drain, record latency recedes toward
+the steady-state level as the backlog is cleared. The resulting latency–time trajectory is
+therefore approximately **triangular**, as illustrated in Figure 2.
+
+<!-- ▣ FIGURE 2 배치: 여기(III.B). 1단 폭, [t]. figs/fig0_trace.pdf.
+     Figure 1과 같은 쪽에 몰리면 하나를 다음 단 상단으로 밀 것. -->
 
 ![Figure 2](figs/fig0_trace.png)
 
-**Figure 2.** Latency and throughput time series for a single failure episode, showing
-the triangular recovery trajectory along which record latency falls as the backlog is
-cleared. The quadratic relation of the area across many episodes is validated in
-Figure 3.
+**Fig. 2.** Representative recovery episode. Excess record latency recedes as the replay
+backlog is drained.
 
-### C. Mean-Latency Objective and Optimal Interval
-
-If failures are independent of the checkpoint schedule then `a ~ U(0, τ)`, so
-`E[(a + D)²] = τ²/3 + τD + D²`. Writing the mean latency increase due to steady-state
-checkpointing as `δ²/(2(1 − ρ)τ)`, the overall mean latency is
+Because records are served at approximately μ_d during catch-up, the accumulated
+record-weighted excess latency is
 
 ```
-L̄(τ) = ℓ₀ + δ²/(2(1 − ρ)τ) + [μ_d/(2(μ_d − λ)M)]·(τ²/3 + τD + D²)
+A = μ_d · ½(a + D) · T_c = μ_d·λ·(a + D)² / (2(μ_d − λ))                   (3)
 ```
 
-The first variable term decreases with τ while the second increases, so an interior
-optimum exists. Differentiating and setting the derivative to zero gives (with
-`ρ_d = λ/μ_d`)
+Equation (3) exposes the defining property of the model: recovery cost is **quadratic**,
+rather than linear, in checkpoint age. Increasing a enlarges not merely the initial replay
+backlog but also the duration over which that backlog delays subsequent records.
+
+### C. Mean-Latency Objective
+
+Assuming failures are independent of the checkpoint schedule, a ~ U(0, τ), and hence
 
 ```
-δ²·M·(1 − ρ_d)/(1 − ρ) = τ²·(2τ/3 + D)
+E[(a + D)²] = τ²/3 + τD + D²                                               (4)
 ```
 
-For D ≪ τ this becomes `τ* ≈ (1.5·δ²M)^(1/3)`, i.e. the latency-optimal interval grows
-asymptotically as the cube root of M. For comparison, a baseline formulated in terms of
-capacity loss (wasted work) is `τ*_cap ≈ √(2δ_cap·M/ρ)`, which is proportional to √M.
-This baseline is a reference line constructed from the capacity accounting of our own
-model and is not the exact utilization optimum of Jayasekara [4]. Consequently, even for
-the same system, a capacity-based and a latency-based criterion may select different
-intervals.
+Let δ denote the **latency-equivalent checkpoint cost**, estimated from the steady-state
+latency increase induced by checkpointing. The resulting mean-latency objective is
 
-### D. Mean-Load Stability Condition
+```
+L̄(τ) = ℓ₀ + δ²/(2(1 − ρ)τ) + [μ_d/(2(μ_d − λ)M)]·(τ²/3 + τD + D²)          (5)
+```
 
-If the backlog left by one failure is not cleared before the next failure, latency
-accumulates. Taking the mean age as τ/2, the expected catch-up time yields the condition
-`λ(τ/2 + D)/(μ_d − λ) + D < M`. This is not a deterministic hard bound but a
-first-moment mean-load stability condition; since failure intervals are stochastic,
-individual failures are not guaranteed to satisfy it.
+The first variable term is decreasing in τ whereas the recovery term is increasing; an
+interior optimum therefore exists. Differentiating (5) and defining ρ_d = λ/μ_d yields
 
-## IV. Experiment
+```
+δ²·M·(1 − ρ_d)/(1 − ρ) = τ²·(2τ/3 + D)                                     (6)
+```
 
-### A. Experimental Environment
+When D ≪ τ,
 
-Single-node experiments were run on an 8-core server and distributed experiments on two
-servers of the same class. Apache Flink 1.20.5 was run in standalone mode and Kafka
-3.9.2 in KRaft mode, with full, exactly-once, aligned checkpoints on the RocksDB state
-backend. In the two-node configuration the JobManager, Kafka and a TaskManager were
-placed on the first node, and a TaskManager and MinIO on the second, with checkpoints
-written to S3-compatible remote storage (Figure 1). Table II summarizes the environment.
+```
+τ* ≈ (1.5·δ²M)^(1/3)                                                       (7)
+```
 
-**TABLE II. EXPERIMENTAL ENVIRONMENT**
+so the latency-optimal interval asymptotically obeys an M^(1/3) scaling law.
 
-| Item | Specification |
+For comparison we adopt a capacity/wasted-work reference model,
+
+```
+τ*_cap ≈ √(2·δ_cap·M/ρ)                                                    (8)
+```
+
+where δ_cap is the capacity-equivalent checkpoint loss measured from the throughput deficit.
+Equation (8) follows the conventional √M dependence. It serves solely as a capacity-based
+reference and is not claimed to reproduce the exact utilization optimum of Jayasekara
+et al. [4].
+
+### D. Mean-Load Stability
+
+A checkpoint interval is meaningful only insofar as the replay backlog can be drained
+sufficiently quickly. Substituting the mean checkpoint age τ/2 yields the first-moment
+stability approximation
+
+```
+λ(τ/2 + D)/(μ_d − λ) + D < M                                               (9)
+```
+
+This expression is not a deterministic bound applicable to every failure episode; it
+characterizes the mean-load regime in which backlog accumulation is not expected to persist
+across failures.
+
+## IV. EXPERIMENTAL EVALUATION
+
+### A. Experimental Setup
+
+Experiments were conducted on Apache Flink 1.20.5 and Kafka 3.9.2. The single-node campaign
+employed local checkpoint storage, whereas the distributed configuration used two servers
+with MinIO as S3-compatible remote checkpoint storage. Flink was configured with RocksDB and
+full, aligned, exactly-once checkpoints.
+
+<!-- ▣ TABLE II 배치: 여기(IV.A 첫 문단 직후). 2열이지만 행이 10개라 1단 폭으로 충분.
+     캡션은 표 위. 지면이 빡빡하면 이 표를 본문 2~3문장으로 흡수 가능. -->
+
+**TABLE II. EXPERIMENTAL CONFIGURATION**
+
+| Item | Configuration |
 |---|---|
-| Nodes | 8-core server × 2 (single-node / two-node) |
-| Stream engine | Apache Flink 1.20.5 (standalone) |
-| Message broker | Apache Kafka 3.9.2 (KRaft) |
-| State backend | RocksDB; full, exactly-once, aligned |
-| Remote checkpoint storage | MinIO (S3-compatible, two-node) |
+| Computing nodes | 8-core server × 2 |
+| Stream processor | Apache Flink 1.20.5 |
+| Source | Apache Kafka 3.9.2, KRaft |
+| State backend | RocksDB, full/non-incremental |
+| Checkpoint mode | Exactly-once, aligned |
 | State size | approx. 100 / 200 / 400 MB |
-| Reference utilization ρ | 0.5 (also 0.3, 0.65, 0.8) |
-| Scale | Campaign 1: 255 single-node runs + approx. 22 two-node runs; 13,000+ checkpoints |
-| Calibration campaign | 10 two-node calibration runs (the pre-specified validation attempt of IV.D) |
-| Fraction used in analysis | approx. 34% (remainder excluded by IV.B criteria and storage degradation) |
-| Continuous operation | approx. 48 hours |
+| Utilization ρ | 0.30–0.80 |
+| Main campaign | 255 single-node runs |
+| Distributed campaign | approx. 22 two-node runs |
+| Checkpoints | more than 13,000 |
 
-### B. Workload, Instrumentation and Failure Injection
+The workload was synthetic so that processing demand and state size could be varied
+independently. CPU demand was governed by a per-record spin loop, while state size was varied
+through the number of keyed state entries. Record latency was instrumented within the
+application as the elapsed time between generation and processing, and a record-weighted mean
+was collected every 500 ms.
 
-A synthetic workload was used so that state size and processing rate could be controlled
-independently. Per-record CPU load was set by a spin loop and state size by the number of
-keys, with key-derived pseudo-random data to avoid RocksDB compression. Latency was
-measured inside the application as the difference between record creation and processing
-time rather than from Flink's long-window metrics, and a record-weighted mean, weighted
-by the number of records processed, was recorded every 500 ms.
+Failures were injected by terminating and restarting a TaskManager. Inter-failure gaps
+followed an exponential-gap renewal process with a 40-s minimum separation; the configured
+mean was 55 s, whereas the measured mean inter-failure interval was approximately 72.8 s.
+Analyses requiring M therefore employ the measured interval rather than the nominal value.
 
-Failures were injected by force-killing a TaskManager and restarting it. Failure
-intervals were generated not by a simple Poisson process but by an exponential-gap
-renewal process with a 40 s minimum gap. The nominal MTBF was 55 s, but the mean interval
-actually injected was about **72.8 s**; analyses requiring M use the measured interval.
-The analysis distinguishes (i) runs whose interval is shorter than twice the checkpoint
-duration, (ii) runs whose throughput fails to keep up with the input, (iii) runs that did
-not return to normal, and (iv) censored episodes whose recovery did not complete within
-the measurement window. The τ < 2d criterion is not a physical minimum interval but an
-empirical analysis threshold adopted so that the steady-state 1/τ regression can be
-measured stably.
+Runs were excluded from the primary model analysis when the checkpoint interval entered the
+empirically saturated regime, the processor failed to sustain the input rate, recovery did
+not return to steady state, or the episode was censored before backlog drainage completed.
+The criterion τ < 2d, where d is the checkpoint duration, serves solely as an **empirical
+analysis threshold** for obtaining a separable steady-state 1/τ regime; it is not a physical
+lower bound imposed by Flink. Approximately 34% of the collected runs satisfied the primary
+analysis criteria.
 
-The checkpoint age a was measured from the completion time of the last **completed**
-checkpoint (`latest_ack_timestamp`). The D obtained as `D = p − a` is therefore not a
-pure engine downtime but an **effective outage** that partly includes the difference
-between the checkpoint completion time and the restore reference point; this is why D is
-referred to as an effective outage throughout. Applying these criteria together with the
-storage degradation described below, **approximately 34% of all runs were used in the
-analysis**. Excluded runs were retained rather than discarded; in particular, runs
-falling under (iii) are used in the stability discussion of IV.C-4.
+Checkpoint age was computed from the completion time of the latest successfully completed
+checkpoint. Consequently D must be construed as an effective outage rather than as pure
+engine downtime.
 
-### C. Results
+### B. Structural Validation of the Backlog-Drain Geometry
 
-**1) Parameter-free geometric estimate versus measurement.** For each failure we measured
-the input rate λ, the processing rate during recovery μ_d, and the peak latency p **on
-that failure itself**, computed `A_geo = μ_d·λ·p²/(2(μ_d − λ))`, and compared it with the
-measured excess latency area of the same episode. **The geometric expression itself
-contains no parameters fitted to the data.**
+For each usable failure episode, the input rate λ, the recovery processing rate μ_d, and the
+peak observed latency p were measured **from that same episode**. The geometric estimate
 
-Two points about what is being validated, and how, should be stated explicitly. First,
-because p is measured on the episode in question, this is **not out-of-sample prediction
-of the cost of a future failure** but a **structural validation** of whether the
-triangular backlog-drain geometry derived in III.B holds on the actual recovery
-trajectory. Second, the coefficient of determination reported below is the **R² of a
-linear regression (with fitted slope and intercept)** of the measured area on the
-geometric estimate, not the explanatory power of the geometric expression on its own. It
-is therefore **a model with no fitted parameters, evaluated by regression**.
+```
+A_geo = μ_d·λ·p² / (2(μ_d − λ))                                           (10)
+```
 
-Over 30 episodes in the 100k-key, ρ = 0.50 condition this regression gives **R² = 0.996**
-with a slope of **1.107**. Over 61 episodes in the 200k-key, ρ ≈ 0.30 condition it gives
-**R² = 0.982** with a slope of **1.092**. R² quantifies the strength of the linear association, while the slope indicates agreement in scale.
+contains no parameters fitted to the measured latency area.
 
-Figure 3 pools all **218** usable episodes across three state sizes (100k: 31, 200k: 168,
-400k: 19), a broader population than the two conditions above. Over this full set the
-measurement aligns at about **1.2×** the geometric estimate, and the relation holds
-across four decades (10⁰–10⁴ M record·s). The geometric expression thus reproduces the
-structure of the cost while carrying a **systematic deviation that underestimates its
-magnitude by roughly 20%**.
+Because p is itself measured on the episode under evaluation, this test is deliberately a
+**structural validation** rather than an out-of-sample prediction of a future failure. The
+linear regression used to summarize agreement fits a slope and an intercept; the reported R²
+therefore characterizes the association between the parameter-free geometric estimate and the
+measurement, and does not constitute a parameter-free R².
 
-Because the geometric expression contains no data-fitted parameters, the possibility of
-overfitting through model-parameter fitting is limited. Analysis choices such as the
-episode exclusion criteria, the way μ_d is measured, and the definition of peak latency
-do nevertheless have an effect.
+For 30 episodes in the 100k-key, ρ = 0.50 condition the comparison yields R² = 0.996 with a
+slope of 1.107. For 61 episodes in the 200k-key, ρ ≈ 0.30 condition it yields R² = 0.982 with
+a slope of 1.092.
+
+Figure 3 aggregates 218 usable episodes across three state sizes: 31 episodes at 100k keys,
+168 at 200k, and 19 at 400k. The measured excess-latency area is approximately 1.21× the
+geometric estimate in the median, and the association persists across roughly four orders of
+magnitude. The proposed geometry thus captures the dominant recovery-cost structure, while
+systematically underestimating its magnitude by approximately 20%.
+
+<!-- ▣ FIGURE 3 배치: 여기(IV.B 끝). 논문에서 가장 중요한 그림 — 1단 폭, [t],
+     그리고 **본문 IV.B와 같은 쪽**에 오게 하십시오. figs/fig3_area_validation.pdf.
+     지면이 부족해도 이 그림은 마지막까지 유지. -->
 
 ![Figure 3](figs/fig3_area_validation.png)
 
-**Figure 3.** Parameter-free geometric estimate versus measured latency area. The
-geometric value computed from only λ, μ_d and the peak latency measured at each failure
-(x) against the measured excess latency area of the same episode (y). No parameters are
-fitted. The plot contains 218 episodes across three state sizes; the solid line is the
-median ratio of measurement to estimate (×1.21) and the dashed line is y = x. The
-quadratic backlog-drain relation holds across four decades of episodes.
+**Fig. 3.** Structural validation of the backlog-drain geometry. The abscissa is the
+parameter-free geometric estimate computed from same-episode λ, μ_d, and peak latency; the
+ordinate is the measured record-weighted excess-latency area. The solid line denotes the
+median measured-to-estimated ratio (1.21×) and the dashed line denotes y = x.
 
-**2) The two costs of a checkpoint, and δ.** The cost computed from the processing
-capacity lost during a checkpoint was about 0.15–0.22 s, whereas the latency-equivalent
-cost δ estimated from the steady-state latency curve was about 1.37–4.16 s — a factor of
-8.8–18.6 depending on the condition. This difference is consistent with the fact that a
-checkpoint need not stop all computation in order to increase the delay of many records
-through barriers, state snapshots and momentary stalls. Table III summarizes the checkpoint duration d and the
-latency cost δ for four conditions; δ/d lies in the range 0.43–0.61. With local storage
-there is thus some room to use δ ≈ d/2 as an initial estimate, but this is not a general
-law: in the two-node remote-storage configuration δ/d is 0.18–0.23 (Table V). As noted
-below Table III, storage speed and utilization vary together across the four conditions,
-so this range must be read as the combined effect of both factors.
+### C. Latency-Equivalent Checkpoint Cost
 
-**TABLE III. CHECKPOINT COST δ BY CONDITION** (the fit R² is that of the steady-state
-1/τ regression used to estimate δ)
+Checkpoint cost depends materially on the metric by which it is quantified. The
+capacity-equivalent loss obtained from the throughput deficit during checkpointing was
+approximately 0.15–0.22 s. By contrast, the latency-equivalent parameter δ, estimated from
+steady-state latency as a function of 1/τ, ranged from 1.37 to 4.16 s.
 
-| State | Storage | ρ | δ (s) | d (s) | δ/d | Fit R² |
+<!-- ▣ TABLE III 배치: 여기(IV.C, 첫 인용 직후). 7열이라 2단 폭(table*) 권장.
+     캡션 위. 이 표는 끝까지 유지 — R² 열이 표에만 있는 정보입니다. -->
+
+**TABLE III. LATENCY-EQUIVALENT CHECKPOINT COST**
+
+| State | Storage | ρ | δ (s) | d (s) | δ/d | R² |
 |---|---|---|---|---|---|---|
 | 100 MB | fast | 0.50 | 1.371 | 3.08 | 0.45 | 0.979 |
 | 200 MB | fast | 0.50 | 1.907 | 3.12 | 0.61 | 0.863 |
 | 100 MB | slow | 0.30 | 3.195 | 5.24 | 0.61 | 0.967 |
 | 200 MB | slow | 0.30 | 4.159 | 9.67 | 0.43 | 0.791 |
 
-Storage speed and utilization change together across these four conditions
-(fast = ρ 0.50, slow = ρ 0.30). The δ/d range can therefore not be attributed to either
-the storage effect or the load effect alone, and the two 200 MB conditions that form the
-ends of the range also have comparatively low regression fits (R² = 0.863, 0.791). This
-table should be read only as showing that δ is not equal to d and that their ratio varies
-considerably with condition.
+Across the single-node local-storage conditions examined, δ/d lies between 0.43 and 0.61. In
+the two-node remote-storage configuration the same ratio was 0.18–0.23; d/2 may therefore
+serve as a coarse empirical initializer for δ in local configurations comparable to those
+tested, but it is **not a general relationship**. Storage performance and utilization also
+co-vary across the conditions of Table III, so their individual contributions cannot be
+disentangled from that table alone.
 
-**3) Scaling of the optimal interval by objective.** Using the derived model (reference
-arm δ = 1.907 s, D = 4.28 s, ρ = 0.5) we compared the latency-optimal interval with the
-capacity/wasted-work baseline as a function of M (Figure 4). The two criteria differ not
-merely in value but in **rate of growth**. The capacity/wasted-work baseline follows
-`τ* ∝ √M` with an exponent of exactly 0.50, whereas the local exponent of the latency
-model is about 0.43 at M = 55 s and about 0.35 at M = 1 day, approaching 1/3
-asymptotically. As a result the ratio of the two intervals widens from 1.4× at M = 30 s
-to 2.4× at one hour and 3.8× at one day. The gap between the two predicted
-intervals therefore widens as failures become rarer.
+The larger latency-equivalent cost is consistent with checkpointing perturbing record latency
+even when processing does not halt outright: barrier propagation, state snapshotting, and
+transient stalls can delay a great many records while producing only a modest aggregate
+throughput deficit.
 
-**Measurable range of the predicted τ\*.** The comparison above is between models, so
-whether the predicted τ\* agrees with the measured optimal interval must be checked
-separately. Computing τ\* for each condition from its own δ, D and ρ_d together with the
-measured mean failure interval, and comparing with the interval range actually measured
-in that condition, gives Table IV.
+### D. Optimal-Interval Scaling and Observability
 
-**TABLE IV. PREDICTED τ\* AND MEASURABLE RANGE BY CONDITION**
+Figure 4 contrasts the latency-optimal checkpoint interval with the capacity/wasted-work
+baseline as the mean failure interval M varies. For the reference parameters δ = 1.907 s,
+D = 4.28 s, ρ = 0.5 and ρ_d = 0.513, the local logarithmic exponent of the latency model is
+approximately 0.41 at M = 55 s, 0.36 at one hour, and 0.34 at one day, approaching the
+asymptotic value 1/3. The capacity-based reference follows the 1/2 exponent of √M, evaluated
+with δ_cap = 0.22 s. The separation between the two predicted intervals widens accordingly,
+from approximately 1.3× at M = 30 s to 2.3× at one hour and 3.7× at one day.
 
-| Condition | δ (s) | D (s) | M (s) | Predicted τ\* (s) | Analysis threshold 2d (s) | Measured τ range (points) |
-|---|---|---|---|---|---|---|
-| 100 MB, fast, ρ 0.50 | 1.37 | 2.76 | 69 | **4.6** | 2.9 | 4–32 (4) |
-| 200 MB, fast, ρ 0.50 | 1.91 | 4.65 | 142 | **7.3** | 6.2 | 16–68 (4) |
-| 200 MB, slow, ρ 0.30 | 4.16 | 10.39 | 67 | **8.3** | 17.1 | 21–89 (10) |
-| 100 MB, slow, ρ 0.30 | 3.20 | — | — | — | — | no analyzable runs |
-
-The D and the analysis threshold 2d in Table IV are **values measured on each condition's
-τ\*-analysis runs (the failure runs)**, and therefore differ from the d in Table III,
-which is an aggregate over the failure-free runs used to estimate δ, and from the
-reference-arm D in IV.C-3. In particular, for the 100 MB fast condition the runs from
-which δ was obtained have d = 3.08 s whereas the runs in which the optimum was observed
-have d = 1.45 s, so the two quantities were **measured under different storage states**.
-The closeness of prediction and measurement in this condition was therefore not
-established within runs sharing the same storage state, and should be read as
-correspondingly limited evidence.
-
-In the 100 MB fast condition the mean latency of the four measured points was lowest at
-τ = 4.2 s (785 ms) and increased monotonically thereafter (8.0 s → 1118 ms, 16.0 s →
-3390 ms, 32.0 s → 6191 ms), agreeing with the predicted 4.6 s to within one grid step.
-This minimum is at the left edge of the sweep, however, so **only the right branch of the
-optimum was observed**; the region in which latency rises again to the left was not
-measured in this condition.
-
-The 200 MB slow condition has a checkpoint duration of 8.5 s, so its analysis threshold
-(2d = 17.1 s) exceeds the predicted 8.3 s, and in the 200 MB fast condition the shortest
-measured interval is 16 s against a predicted 7.3 s. In these configurations, that is,
-**the latency-optimal interval is shorter than the analysis threshold (2d) tied to the
-checkpoint duration.** Here 2d is not a physical lower bound below which Flink cannot
-operate, but the empirical analysis threshold set in IV.B so that the steady-state 1/τ
-regression can be measured stably. This result should therefore be read not as "that
-interval is impossible" but as **"the optimum could not be confirmed in that region with
-the present instrumentation."** That the predicted optimum is of the same order as the
-checkpoint duration does, however, suggest that realizing a latency-optimal interval in
-configurations with large state or slow storage requires reducing the checkpoint duration
-first.
+<!-- ▣ FIGURE 4 배치: 여기(IV.D). 1단 폭, [t]. figs/fig2_scaling.pdf.
+     결론을 담는 그림이므로 Figure 3과 함께 끝까지 유지.
+     주의: 이 그림은 make_fig4_scaling.py로 재생성됩니다. ρ_d를 바꾸면
+     본문의 지수(0.41/0.36/0.34)와 비율(1.3/2.3/3.7)도 같이 고쳐야 합니다. -->
 
 ![Figure 4](figs/fig2_scaling.png)
 
-**Figure 4.** Dependence of the optimal interval on M by objective (log–log). The
-capacity/wasted-work baseline is a straight line of slope 1/2, whereas the latency
-criterion is shallower and approaches a slope of 1/3. The shaded region lies beyond the
-mean-load stability condition of III.D, where the backlog is not cleared before the next
-failure.
+**Fig. 4.** Model-derived checkpoint interval as a function of the mean failure interval M.
+Curves use the reference parameters δ = 1.907 s, D = 4.28 s, ρ = 0.5, ρ_d = 0.513 and
+δ_cap = 0.22 s. The capacity/wasted-work reference follows M^(1/2), whereas the
+record-weighted latency optimum approaches M^(1/3). The shaded region denotes violation of
+the mean-load stability approximation.
 
-**4) Storage performance change and stability.** Over 31 hours of continuous experiments
-the checkpoint write throughput fell from about 288 MB/s to 63 MB/s, so that the
-checkpoint duration for the same state grew from 2–3 s to 8–10 s (`iostat` %util 90.6%).
-SLC cache exhaustion was considered a possible cause but was not independently verified. Because such degradation would contaminate
-the regression if it correlated with the order in which intervals were run, we randomized
-the interval order and interleaved fixed-interval control runs. In some conditions, in
-addition, longer τ meant that the failure backlog was not cleared before the next failure
-and latency accumulated (in a representative experiment, normal recovery up to τ = 64 s
-and failure to recover at τ = 128 s). Interval optimization must therefore be carried out
-within the stable region.
+The salient implication is not merely that the two models yield different numerical
+intervals: **their scaling laws differ.** The divergence between the two predictions
+consequently widens as failures become less frequent.
 
-**5) Two-node distributed environment.** The single-node configuration used the local
-filesystem and the two-node configuration MinIO remote storage on the second server. The
-two-node experiments comprise about 22 runs (re-measuring the reference condition, state
-size and restore time) and are thus smaller in scale than the single-node experiments. In
-this configuration the engine restore time reported by Flink increased from about 1.20 s
-to 2.39 s (Table V; median over 12 failure episodes).
+The location of the latency optimum was further compared against the checkpoint intervals
+that were empirically observable in each condition.
 
-δ/d, by contrast, decreased. This decrease must not be read as an improvement in δ
-itself. The single-node values being compared come from the later part of the experiments,
-when storage degradation had progressed and the checkpoint duration d had grown to 8–9 s,
-whereas d was 2.5–6 s in the two-node configuration. The fall in δ/d therefore partly
-reflects the fact that **the denominator d was measured under different storage states**.
-Moreover, the single-node and two-node comparison changes node topology and checkpoint
-storage backend at the same time, so the increase in restore time cannot be attributed
-causally to network distance alone. A clock offset of about 0.1 s between the two nodes
-was also observed, which introduces error into comparisons of δ at the scale of hundreds
-of milliseconds. We therefore interpret this result in the limited sense that "recovery
-time increased in a configuration that combined distributed placement with remote
-storage."
+<!-- ▣ TABLE IV 배치: 여기(IV.D). 7열이라 2단 폭(table*) 권장. 캡션 위.
+     지면이 부족하면 이 표를 본문 2~3문장으로 흡수할 수 있으나, 바로 아래
+     "subset이 다르다"는 문단은 반드시 남겨야 합니다. -->
 
-**TABLE V. SINGLE NODE VERSUS TWO-NODE DISTRIBUTED**
+**TABLE IV. PREDICTED OPTIMUM AND EMPIRICALLY OBSERVABLE RANGE**
 
-| Metric | Single node | Two-node | Note |
-|---|---|---|---|
-| Engine restore time | 1.20 s | 2.39 s | ×2.0 |
-| Checkpoint duration d | 8–9 s (late, degraded) | 2.5–6 s | different storage states |
-| δ/d | 0.43–0.61 | 0.18–0.23 | reflects the d difference above |
-| Scale | 255 runs | approx. 22 runs | — |
-| Clock offset | — | ≈0.1 s | (limitation) |
+| Condition | δ (s) | D (s) | M (s) | Pred. τ* (s) | 2d (s) | Measured τ (points) |
+|---|---|---|---|---|---|---|
+| 100 MB, fast, ρ = .50 | 1.37 | 2.76 | 69 | 4.6 | 2.9 | 4–32 (4) |
+| 200 MB, fast, ρ = .50 | 1.91 | 4.65 | 142 | 7.3 | 6.2 | 16–68 (4) |
+| 200 MB, slow, ρ = .30 | 4.16 | 10.39 | 67 | 8.3 | 17.1 | 21–89 (10) |
+| 100 MB, slow, ρ = .30 | 3.20 | — | — | — | — | unavailable |
 
-### D. Limitations
+The D values and the analysis threshold 2d reported in Table IV were measured on each
+condition's τ*-analysis runs, that is, on the failure runs; they consequently differ from the
+d of Table III, which aggregates the failure-free runs used to estimate δ, and from the
+reference D employed in Figure 4. For the 100 MB fast condition in particular, the runs from
+which δ was obtained exhibit d = 3.08 s whereas the runs in which the optimum was observed
+exhibit d = 1.45 s, so **the two quantities were measured under different storage states.**
 
-What this work validates by measurement is the **backlog-drain geometry** (Figure 3); the
-**location of the optimal interval τ\* derived from it was not independently validated.**
-As Table IV shows, only in the 100 MB fast condition did the measured minimum (4.2 s)
-agree with the prediction (4.6 s) to within one grid step, and even there the minimum was
-at the left edge of the sweep so that only one branch of the optimum was observed. In the
-remaining conditions the predicted τ\* was shorter than the analysis threshold tied to the
-checkpoint duration and thus outside the measurable range.
+For the 100 MB fast condition, measured latency was lowest at τ = 4.2 s, close to the
+predicted 4.6 s. That point, however, lies at the left boundary of the measured grid, so only
+the increasing branch to the right of the candidate optimum was observed; nor was the
+agreement established within runs sharing a common storage state. This therefore constitutes
+supporting evidence rather than an independent identification of the global optimum.
 
-To close this gap we planned a separate held-out validation using a **pre-specified**
-procedure: measure δ, ℓ₀, D and μ_d in calibration runs and **freeze** them, compute τ\*,
-repeat an eight-point grid around it three times each, re-estimate no parameter from the
-validation runs, and fix the decision criteria before any data were collected.
+For the remaining conditions the predicted optimum fell below either the measured interval
+range or the empirical 2d analysis threshold. That threshold is not a Flink operating limit;
+it demarcates the range within which the steady-state checkpoint-cost regression could be
+reliably separated with the present instrumentation.
 
-**Ten calibration runs, however, showed that the parameters required for the validation
-could not be obtained in this configuration, and the validation sweep was not executed.**
-The checkpoint duration in the two-node remote-storage configuration measured 4.13 s,
-placing the empirical analysis threshold at 8.26 s. The preliminary calibration placed the
-candidate optimum below that threshold, while the parameter estimates were too unstable for
-independent validation (four points remaining in the 1/τ regression, R² = 0.04; two usable
-failure episodes). **This
-judgment was made before any validation data were collected**, and independent validation
-of τ\* remains future work. Carrying it out requires first securing a configuration in
-which the predicted optimum lies above the empirically usable region — a short checkpoint
-duration or a relatively large δ, together with a longer mean failure interval.
+Protracted experimentation additionally exposed substantial storage drift: checkpoint write
+throughput declined from approximately 288 MB/s to 63 MB/s over 31 h, while the checkpoint
+duration grew from roughly 2–3 s to 8–10 s. SLC-cache exhaustion was entertained as a
+possible explanation but was not independently verified. Checkpoint intervals were
+accordingly randomized and fixed-interval control runs interleaved so as to attenuate
+ordering bias.
 
-Approximately 34% of runs were used in the analysis, and in some conditions the mean
-latency differed between runs at the same interval by up to several times (200 MB fast,
-2.8× at τ ≈ 32 s). Together with the fact that storage degradation progressed over the
-experimental period, the quantitative figures reported here should be interpreted as
-specific to this configuration.
+A smaller two-node experiment employed remote MinIO checkpoint storage. The median engine
+restore time increased from approximately 1.20 s in the single-node configuration to 2.39 s
+across 12 two-node failure episodes. Because node topology and checkpoint-storage backend
+were altered concurrently — and because the single-node comparison values were obtained once
+the checkpoint duration had already grown to 8–9 s under storage drift — this difference is
+reported solely as a configuration-level observation and is not attributed causally to
+network placement.
 
-## V. Conclusion
+### E. Limitations
 
-This paper analyzed checkpoint intervals in distributed stream processing with a durable
-source from the standpoint of record-weighted latency. Because new input keeps arriving
-during replay after a failure, the backlog drains only at the residual capacity μ_d − λ,
-from which we derived that the failure cost is proportional to (a + D)². Combining this
-with the steady-state checkpoint cost yields an optimal interval that differs from the
-capacity-loss criterion (√M); under certain conditions the latency-optimal interval grows
-more slowly than √M (local exponent 0.43–0.35). In Flink/Kafka experiments the
-backlog-drain geometric expression, computed from per-failure measurements alone and
-containing no fitted parameters, showed a linear relation to the measured latency area
-with R² = 0.996 and a slope of 1.107 in the reference condition, and **under the tested
-conditions** the latency-equivalent checkpoint cost was substantially larger than the
-capacity-equivalent loss. Different cost characteristics were observed in the single-node
-local-storage and two-node remote-storage configurations, but since the two
-configurations changed topology and storage backend together, we do not attribute this to
-either factor causally. An independent validation of the predicted optimal interval
-itself was prepared to the point of a pre-specified procedure but was not executed, as
-the calibration stage showed the predicted optimum of that configuration to lie below the
-measurable interval range (IV.D). In future work we plan to select a configuration in
-which the predicted optimum lies above the usable region and carry out this validation,
-and to test generality through experiments that vary local and remote storage
-independently, with more nodes, real workloads and a wider range of failure types. The raw data
-from the 255-run single-node campaign (more than 13,000 checkpoints) and the analysis
-scripts have been retained for reproducibility.
+The experiments substantiate the recovery-cost geometry more firmly than the location of the
+global latency optimum. Independent held-out validation of τ* was planned under a
+**pre-specified** calibration-and-freeze protocol. Ten calibration runs in the two-node
+remote-storage configuration, however, yielded a checkpoint duration of 4.13 s and an
+empirical analysis threshold of 8.26 s. The preliminary candidate optimum fell below that
+threshold, while the calibration parameters proved insufficiently stable for independent
+validation: only four points remained in the 1/τ regression (R² = 0.04), and only two usable
+failure episodes remained for estimating recovery quantities. **The validation sweep was
+therefore terminated before any validation data were collected.**
 
-## Acknowledgment
+The evaluation further relies on a synthetic workload and on TaskManager termination as the
+principal failure mode. Approximately 34% of runs satisfied the primary analysis criteria,
+and substantial run-to-run variation was observed under certain storage conditions. The
+quantitative parameter values should accordingly be construed as configuration-specific;
+broader validation across storage systems, workloads, node counts, and failure modes remains
+necessary.
 
-[To be completed by the authors.]
+## V. CONCLUSION
 
-## References
+This paper presented a checkpoint-interval model for latency-sensitive distributed stream
+processing predicated on record-weighted recovery latency. With a durable source, new records
+continue to arrive during replay, so the recovery backlog drains only at the residual service
+capacity μ_d − λ. This mechanism induces a quadratic recovery penalty in checkpoint age.
+Combining that penalty with the latency-equivalent cost of steady-state checkpointing yields
+a latency-optimal interval whose asymptotic dependence on the failure interval approaches
+M^(1/3), in contrast to the √M scaling of a capacity/wasted-work reference.
+
+Apache Flink/Kafka experiments furnish structural support for the proposed backlog-drain
+geometry. In representative conditions the parameter-free geometric estimate exhibits
+R² = 0.996 with a slope of 1.107, and R² = 0.982 with a slope of 1.092, against the measured
+record-weighted excess-latency area. Under the tested conditions the latency-equivalent
+checkpoint cost was likewise substantially larger than the corresponding capacity-equivalent
+loss.
+
+The predicted optimum itself has not yet been independently validated across checkpoint
+intervals. Future work will therefore target configurations in which the candidate optimum
+lies within the empirically observable regime, while varying storage backend, cluster
+topology, workload, and failure mode independently.
+
+## ACKNOWLEDGMENT
+
+[Insert the funding/project acknowledgment supplied by the advisor or laboratory, if
+applicable.]
+
+## REFERENCES
+
+<!-- ▣ REFERENCES: IEEE 형식. [8][9][10]의 권·호·쪽수는 반드시 직접 확인하십시오.
+     특히 [9]는 쪽수를 비워 두었습니다. -->
 
 [1] J. W. Young, "A first order approximation to the optimum checkpoint interval,"
 *Communications of the ACM*, vol. 17, no. 9, pp. 530–531, 1974.
+
 [2] J. T. Daly, "A higher order estimate of the optimum checkpoint interval for restart
 dumps," *Future Generation Computer Systems*, vol. 22, no. 3, pp. 303–312, 2006.
-[3] Y. Zhuang et al., "An optimal checkpointing model with online OCI adjustment for
-stream processing applications," in *Proc. ICCCN*, 2018, pp. 1–9,
-doi: 10.1109/ICCCN.2018.8487327.
-[4] S. Jayasekara et al., "A utilization model for optimization of checkpoint intervals
-in distributed stream processing systems," *Future Generation Computer Systems*,
-vol. 110, pp. 68–79, 2020.
-[5] Z. Zhang et al., "Research on optimal checkpointing-interval for Flink stream
-processing applications," *Mobile Networks and Applications*, vol. 26, no. 5,
-pp. 1950–1959, 2021.
-[6] S. Jayasekara et al., "Optimizing checkpoint-based fault-tolerance in distributed
-stream processing systems: theory to practice," *Software: Practice and Experience*, 2022.
+
+[3] Y. Zhuang et al., "An optimal checkpointing model with online OCI adjustment for stream
+processing applications," in *Proc. ICCCN*, 2018, pp. 1–9.
+
+[4] S. Jayasekara et al., "A utilization model for optimization of checkpoint intervals in
+distributed stream processing systems," *Future Generation Computer Systems*, vol. 110,
+pp. 68–79, 2020.
+
+[5] Z. Zhang et al., "Research on optimal checkpointing-interval for Flink stream processing
+applications," *Mobile Networks and Applications*, vol. 26, no. 5, pp. 1950–1959, 2021.
+
+[6] S. Jayasekara et al., "Optimizing checkpoint-based fault-tolerance in distributed stream
+processing systems: Theory to practice," *Software: Practice and Experience*, 2022.
+
 [7] P. Carbone et al., "Lightweight asynchronous snapshots for distributed dataflows,"
 arXiv:1506.08603, 2015.
-[8] K. M. Chandy and L. Lamport, "Distributed snapshots: determining global states of
-distributed systems," *ACM Transactions on Computer Systems*, vol. 3, no. 1,
-pp. 63–75, 1985.
+
+[8] K. M. Chandy and L. Lamport, "Distributed snapshots: Determining global states of
+distributed systems," *ACM Transactions on Computer Systems*, vol. 3, no. 1, pp. 63–75,
+1985.
+
 [9] Z. Sebepou and K. Magoutis, "CEC: Continuous eventual checkpointing for data stream
-processing operators," in *Proc. IEEE/IFIP Int. Conf. on Dependable Systems and
-Networks (DSN)*, 2011.
-[10] P. Carbone et al., "State management in Apache Flink: consistent stateful distributed
+processing operators," in *Proc. IEEE/IFIP Int. Conf. Dependable Systems and Networks*,
+2011.
+
+[10] P. Carbone et al., "State management in Apache Flink: Consistent stateful distributed
 stream processing," *Proc. VLDB Endowment*, vol. 10, no. 12, pp. 1718–1729, 2017.
