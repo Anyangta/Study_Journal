@@ -1,0 +1,12 @@
+{
+ "run_id": "m9_p1024_k200k_s32000_r30_c80_m55_0",
+ "episode_index": 4,
+ "steady_latency_s": 0.2276,
+ "lambda_krec_s": 32.677,
+ "restored_at_s": 1.077,
+ "kill_at_s": 0.0,
+ "n_points": 78,
+ "keys": 200000,
+ "tau_s": 89.11,
+ "mu_drain_krec_s": 101.567
+}
