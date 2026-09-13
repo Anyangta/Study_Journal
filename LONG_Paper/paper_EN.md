@@ -200,8 +200,10 @@ therefore approximately **triangular**, as illustrated in Figure 2.
 
 ![Figure 2](figs/fig0_trace.png)
 
-**Fig. 2.** Representative recovery episode. Excess record latency recedes as the replay
-backlog is drained.
+**Fig. 2.** A representative recovery episode (200k keys, ρ = 0.30, τ = 89 s). Excess record
+latency recedes as the replay backlog is drained. The lower panel shows the mechanism
+directly: throughput rises to roughly three times the arrival rate during catch-up and
+returns to λ once the backlog has been cleared, so the backlog recedes at μ_d − λ.
 
 Because records are served at approximately μ_d during catch-up, the accumulated
 record-weighted excess latency is
@@ -342,8 +344,8 @@ a slope of 1.092.
 
 Figure 3 aggregates 218 usable episodes across three state sizes: 31 episodes at 100k keys,
 168 at 200k, and 19 at 400k. The measured excess-latency area is approximately 1.21× the
-geometric estimate in the median, and the association persists across roughly four orders of
-magnitude. The proposed geometry thus captures the dominant recovery-cost structure, while
+geometric estimate in the median, and the association persists across about three orders of
+magnitude (0.8–712 M record·s). The proposed geometry thus captures the dominant recovery-cost structure, while
 systematically underestimating its magnitude by approximately 20%.
 
 <!-- ▣ FIGURE 3 배치: 여기(IV.B 끝). 논문에서 가장 중요한 그림 — 1단 폭, [t],

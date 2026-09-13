@@ -293,7 +293,7 @@ with a slope of **1.107**. Over 61 episodes in the 200k-key, ρ ≈ 0.30 conditi
 Figure 3 pools all **218** usable episodes across three state sizes (100k: 31, 200k: 168,
 400k: 19), a broader population than the two conditions above. Over this full set the
 measurement aligns at about **1.2×** the geometric estimate, and the relation holds
-across four decades (10⁰–10⁴ M record·s). The geometric expression thus reproduces the
+across about three decades (0.8–712 M record·s). The geometric expression thus reproduces the
 structure of the cost while carrying a **systematic deviation that underestimates its
 magnitude by roughly 20%**.
 
@@ -309,7 +309,7 @@ geometric value computed from only λ, μ_d and the peak latency measured at eac
 (x) against the measured excess latency area of the same episode (y). No parameters are
 fitted. The plot contains 218 episodes across three state sizes; the solid line is the
 median ratio of measurement to estimate (×1.21) and the dashed line is y = x. The
-quadratic backlog-drain relation holds across four decades of episodes.
+quadratic backlog-drain relation holds across about three decades of episode cost.
 
 **2) The two costs of a checkpoint, and δ.** The cost computed from the processing
 capacity lost during a checkpoint was about 0.15–0.22 s, whereas the latency-equivalent

@@ -382,14 +382,61 @@ def pick_ref(fits):
     return best
 
 
+def pick_trace_run(rows):
+    """Which run Figure 0 should draw, and which episode of it.
+
+    This figure is the picture of the mechanism the model abstracts, so the
+    episode it shows has to be one that actually recovered.  Taking the first
+    run in list order used to pick an m10 run whose steady level was 102 s and
+    whose effective outage was 98 s -- a run that never recovered -- purely
+    because the string "m10" sorts ahead of "m2".  The trajectory in that
+    figure never came down, which is the opposite of what the caption claims.
+
+    Select on the properties the figure has to show instead:
+      * the run recovered   (not overloaded, steady level in the normal range)
+      * the interval is above the saturation threshold
+      * catch-up is faster than arrival, so a triangle exists at all
+      * the drain finishes inside the plotted window
+      * among those, the largest peak, because the mechanism is easiest to see
+    """
+    import analyze as A
+    best = None
+    for r in rows:
+        if (r.get("n_failures") or 0) < 3 or r.get("overloaded"):
+            continue
+        d = (r.get("ckpt_dur_ms") or 0) / 1000.0
+        tau, st = r.get("ckpt_gap_s"), r.get("steady_lat_ms")
+        lam, mud = r.get("lambda_meas"), r.get("mu_drain")
+        if not (d and tau and st == st and lam and mud) or mud <= lam:
+            continue
+        if st > 5000 or tau < 2.0 * d:          # never settled, or saturated
+            continue
+        try:
+            eps = [e for e in A.analyze_run(r["run_id"])["episodes"]
+                   if not e.get("overlapped") and not e.get("truncated")]
+        except Exception:
+            continue
+        for i, e in enumerate(eps):
+            pk = (e.get("peak_lat_ms") or 0) / 1000.0
+            de = e.get("D_eff_s")
+            if not pk or de is None or de < 0 or de > 12:
+                continue
+            drain = lam * pk / (mud - lam)      # must finish inside +55 s
+            if pk < 6 or drain > 45:
+                continue
+            if best is None or pk > best[0]:
+                best = (pk, r["run_id"], i)
+    return (best[1], best[2]) if best else None
+
+
 def main():
     rows = json.load(open(os.path.join(RES, "summary.json")))
     fits = json.load(open(os.path.join(RES, "fits.json")))
     mu_tab = load_mu()
-    for r in rows:
-        if r.get("n_failures", 0) >= 3 and r["ckpt_ms"] in (16000, 32000):
-            fig0_trace(r["run_id"])
-            break
+    tr = pick_trace_run(rows)
+    if tr:
+        print("  fig0_trace: %s (episode %d)" % tr)
+        fig0_trace(*tr)
     fig1_latency_vs_tau(fits, rows)
     fig2_scaling(fits, rows)
     fig3_area_validation(rows, mu_tab, fits)
